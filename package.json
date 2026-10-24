@@ -1,0 +1,32 @@
+{
+  "name": "sit_stand_move",
+  "author": "MakeAwesomeHappen",
+  "version": "1.0.0",
+  "keywords": ["pebble-app"],
+  "private": true,
+  "dependencies": {},
+  "pebble": {
+    "displayName": "sit_stand_move",
+    "uuid": "56fe7357-4f1c-4f59-8a93-f9e348a387f3",
+    "sdkVersion": "3",
+    "enableMultiJS": true,
+    "targetPlatforms": [
+      "aplite",
+      "basalt",
+      "chalk",
+      "diorite",
+      "emery",
+      "flint",
+      "gabbro"
+    ],
+    "watchapp": {
+      "watchface": false
+    },
+    "messageKeys": [
+      "dummy"
+    ],
+    "resources": {
+      "media": []
+    }
+  }
+}
