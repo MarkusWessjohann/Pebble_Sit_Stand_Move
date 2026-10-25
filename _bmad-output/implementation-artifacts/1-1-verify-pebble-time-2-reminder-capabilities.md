@@ -48,7 +48,7 @@ context:
 
 **Execution:**
 - [x] `_bmad-output/implementation-artifacts/platform-verification.md` -- create an evidence report distinguishing recorded environment facts, unavailable measurements, and unresolved gates -- provide an auditable basis for the pre-implementation decision.
-- [ ] `_bmad-output/implementation-artifacts/platform-verification.md` -- record actual minimal-app build/install outcomes and separate phase/timed-pause Wakeup observations from emulator and physical target -- make reproducibility and device evidence explicit.
+- [x] `_bmad-output/implementation-artifacts/platform-verification.md` -- record actual minimal-app build/install outcomes and separate phase/timed-pause Wakeup observations from emulator and physical target -- make reproducibility and device evidence explicit.
 - [x] `_bmad-output/implementation-artifacts/sprint-status.yaml` -- keep Story 1.1 and Epic 1 at backlog while required physical-device acceptance evidence is unavailable; advance status only when the acceptance evidence is complete.
 
 **Acceptance Criteria:**
@@ -60,7 +60,7 @@ context:
 
 ## Implementation Notes
 
-Environment checks found Python 3.13.5 and uv 0.12.3, but no `pebble`, `pebble-tool`, or `pebble-emulator` executable and no installed `pebble-tool` Python package. The RePebble SDK URL returned HTTP 403. No project app source or manifest exists. Recorded these facts and a host/emulator plus physical-watch test plan in `platform-verification.md`; no install/build/device tests were run. Story remains blocked at its device/toolchain gate. Before scheduling tests, the owner must agree a measurable transition tolerance and what repeated observations are sufficient to accept it.
+The repository contains a Pebble starter app and manifest targeting `emery`; the manifest declares SDK API version 3, not exact CLI/SDK package pins. Existing build artifacts include an `emery` ARM ELF and `.pbw`, and `build/config.log` records Waf 2.1.4 and an SDK/toolchain path at 4.33.1, but no build invocation/exit record establishes reproducibility. In this sandbox, Python 3.13.5 and uv 0.12.3 are available, but `pebble`, `pebble-tool`, and `pebble-emulator` are not; `pebble build` and `pebble install --emulator emery` both fail with `pebble: command not found`. The RePebble SDK URL returned HTTP 403. Recorded the build/install blockers and distinct unrun emulator/physical phase/timed-pause Wakeup checks in `platform-verification.md`. No successful install or device tests were run. Story remains blocked at its device/toolchain gate. Before scheduling timing tests, the owner must agree a measurable transition tolerance and sufficient repeat count. The execution tasks are complete as evidence-reporting tasks; target toolchain and physical-device acceptance remain blocked and are not represented as passing.
 
 ## Spec Change Log
 
@@ -71,9 +71,16 @@ Environment checks found Python 3.13.5 and uv 0.12.3, but no `pebble`, `pebble-t
 - medium — Sprint tracking was advanced although the story explicitly requires retaining backlog/blocked when physical-device checks cannot be performed. Restored Story 1.1 and Epic 1 to backlog until the target acceptance evidence is available. Evidence: no target device is connected to this environment and no CLI/emulator is installed.
 - medium — Acceptance described clock and Wakeup-boundary checks without explicit expected outcomes. Added the already-specified clock policy and documented eight-Wakeup/one-minute limits to the acceptance wording and report checklist.
 - maybe-false — Acceptance does not set a numeric timing tolerance or number of repeats. Product owner agreement is needed before tests can yield a pass/fail result; no value is invented here.
+- deferred — The Code Map says the repository lacks app source and a Pebble manifest, but `src/c/sit_stand_move.c` and `package.json` exist. This inventory drift predates the report changes and is recorded in `deferred-work.md`; the review workflow does not permit editing this build's spec to resolve it.
+- false — The suggested repeat-count acceptance addition edits this build's spec, which the review workflow excludes; the story already records that the owner must agree a sufficient repeat count before timing tests.
+- false — The suggested one-minute-window clarification is already established in architecture as a spacing/exclusion constraint between scheduled wakeups and is used consistently in the report.
+- false — The report asks to record boundary behavior and explicitly documents the eight-event maximum and one-minute spacing; the unrun target tests are clearly marked as blocked.
+- medium — The report distinguishes scheduled-deadline-to-Wakeup-callback delay from scheduled-deadline-to-app-open/foreground delay and records haptic request/delivery separately. Evidence: the prior wording did not distinguish callback timing from app presentation timing.
+- false — Adding test duration or reminder-cycle-count criteria would expand the frozen test intent; the report transparently leaves battery/reliability observations unmeasured pending physical-device testing.
+- false — The report explicitly labels firmware and CLI/SDK pins blocked and the platform gate not passed, so the missing version evidence is accurately disclosed rather than falsely claimed as complete.
 
 ## Verification
 
 **Manual checks (if no CLI):** Confirm report values are sourced from the physical target or exact tool output; confirm no untested firmware-dependent behavior is represented as verified.
 
-**Environment checks run:** `python3.13 --version`, `uv --version`, `command -v pebble`, `command -v pebble-tool`, `command -v pebble-emulator`, `python3.13 -m pip show pebble-tool`, and the RePebble documentation fetch. Results and limitations are recorded in `platform-verification.md`.
+**Environment checks run:** `python3 --version`, `uv --version`, `command -v pebble`, `command -v pebble-tool`, `command -v pebble-emulator`, `python3 -m pip show pebble-tool`, `pebble build`, and `pebble install --emulator emery`. Existing build artifacts and `build/config.log` were inspected. The RePebble documentation fetch result and all environment/build/install limitations are recorded in `platform-verification.md`.
