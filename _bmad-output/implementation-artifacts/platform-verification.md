@@ -1,6 +1,6 @@
 # Pebble Time 2 Platform Verification
 
-**Status:** Partially verified — the owner reports that the earlier starter-app revision built and ran in the `emery` emulator with Pebble Tool 5.1.2 and SDK 4.33.1, and recognized button presses. The current diagnostic harness has not been built or run. Physical Pebble Time 2 reminder capabilities remain unverified.
+**Status:** Partially verified — the earlier starter-app revision ran in the `emery` emulator and recognized button presses. The current diagnostic harness builds and installs successfully per owner report using the project-locked CLI, and the owner reports that the emulator Wakeup test succeeded. Physical Pebble Time 2 reminder capabilities remain unverified; individual emulator callback, foreground, haptic, and timing observations are not yet recorded.
 
 ## Target and environment evidence
 
@@ -10,12 +10,12 @@
 | Emulator | `emery` (Pebble Time 2 target) | Owner reports successful install/run and button input in the emulator. Emulator version is not recorded. No emulator executable is installed or available on this sandbox `PATH`. |
 | Python | 3.13.5 | `python3.13 --version` |
 | uv | 0.12.3 | `uv --version` |
-| Pebble CLI | Pebble Tool 5.1.2 on owner's environment | Owner reported `pebble --version` output: `Pebble Tool v5.1.2 (active SDK: v4.33.1)`. The CLI is not installed on this sandbox `PATH`. |
-| App source and manifest | Diagnostic harness and manifest present | `src/c/sit_stand_move.c`, `wscript`, and `package.json` are present. The owner-reported button test refers to the earlier starter-app revision; the current C source is an unbuilt diagnostic Wakeup harness. `package.json` targets `emery` (Pebble Time 2) and declares `sdkVersion: "3"`. |
-| Pebble SDK package / exact CLI and SDK pins | Observed versions, project pins unresolved | Owner reports Pebble Tool 5.1.2 and SDK 4.33.1. The manifest's `sdkVersion: "3"` identifies an API level, not exact CLI/SDK package pins. The SDK is not installed in this sandbox. |
+| Pebble CLI | Project-locked Pebble Tool 5.0.40; global install is 5.1.2 | Owner reported global output `Pebble Tool v5.1.2 (active SDK: v4.33.1)`. Traceback path showed global tool environment using Python 3.15. Owner reports that using the project-locked CLI now works; `.python-version` selects Python 3.13. |
+| App source and manifest | Diagnostic harness and manifest present | `src/c/sit_stand_move.c`, `wscript`, and `package.json` are present. The owner-reported button test refers to the earlier starter-app revision; the current diagnostic Wakeup harness builds and installs in the emulator per owner report. `package.json` targets `emery` (Pebble Time 2) and declares `sdkVersion: "3"`. |
+| Pebble SDK package / exact CLI and SDK pins | CLI pin added; SDK pin unresolved | Project now pins Pebble Tool 5.0.40 in `pyproject.toml`; the manifest's `sdkVersion: "3"` identifies an API level, not an exact C SDK package. Owner's active SDK is reported as 4.33.1; SDK selection is not verified in this sandbox. |
 | CLI installation documentation | Not retrieved | `curl -L --max-time 30 --fail --silent --show-error https://developer.repebble.com/sdk/` returned HTTP 403 in this environment. |
 
-The owner reports that the earlier starter-app revision built and ran in `emery`, where buttons were recognized. The reported toolchain was Pebble Tool 5.1.2 with active SDK 4.33.1; CLI output stated `SDK 4.33.1 is already installed.` The current diagnostic harness also builds successfully per owner report. However, installing it fails while `pypkjs` / `libpebble2` serializes an emulator `WatchVersion` packet (`KeyError: 'endpoint'` at `localhost:60529`), so no harness launch or Wakeup test has run. The full successful build output, emulator version, and clean/repeated build are unrecorded. The CLI is absent from this sandbox, and no physical-watch test was performed. The architecture's older `pebble-tool` 5.0.18 baseline is superseded as a candidate by the observed 5.1.2 environment, but the project's toolchain is not yet pinned in configuration.
+The owner reports that the earlier starter-app revision built and ran in `emery`, where buttons were recognized. The global CLI was Pebble Tool 5.1.2 with active SDK 4.33.1; CLI output stated `SDK 4.33.1 is already installed.` Installing with that global tool failed in `pypkjs` / `libpebble2` during `WatchVersion` serialization (`KeyError: 'endpoint'` at `localhost:60529`); its traceback path used Python 3.15. The project now pins Tool 5.0.40 and Python 3.13, and the owner reports the diagnostic harness installs successfully using the project-locked CLI. This points to that toolchain resolving the install issue, although it does not isolate CLI-version and Python-version effects. Emulator version, full successful output, and clean/repeated build are unrecorded. Emulator Wakeup behavior and physical-watch results have not yet been reported. The reported C SDK 4.33.1 still needs separate version control.
 
 ## Reproducibility and device test plan
 
@@ -23,12 +23,17 @@ For reproducible verification and physical-device acceptance:
 
 ### Emulator diagnostic harness
 
-The current `src/c/sit_stand_move.c` is a temporary diagnostic app, not the session implementation. In the owner's Pebble Tool 5.1.2 / SDK 4.33.1 environment, from the project root:
+The current `src/c/sit_stand_move.c` is a temporary diagnostic app, not the session implementation. The repository pins Pebble Tool 5.0.40 (with `libpebble2` 0.0.31 and `pypkjs` 3.0.0) in `pyproject.toml` / `uv.lock`. From the project root, use that project environment for a controlled comparison with the global Tool 5.1.2 install:
 
 ```sh
-pebble build
-pebble install --emulator emery
+uv run --locked pebble --version
+uv run --locked pebble build
+uv run --locked pebble install --emulator emery
 ```
+
+This changes both the CLI version and the Python runtime relative to the failing global setup. Owner reports the project-locked combination works; the individual effect of CLI and Python versions is not isolated.
+
+If the locked run succeeds and the cause must be isolated, repeat the install while changing only one variable at a time (same Python with the two CLI versions, then same CLI with Python 3.13 and 3.15), keeping the emulator version fixed. If the locked run fails, capture the full command/output, `python --version`, both global and locked `pebble --version` output, the selected SDK/toolchain path from the build configuration log, and the emulator version.
 
 In the app, press **Up**, then leave it normally (for example, use Back; do not force-stop it); after 120 seconds, record whether the app launches, a haptic is observed, and the log contains `TEST_WAKEUP_LAUNCH` and `TEST_WAKEUP` with cookie `101`. Repeat separately with **Down** for the 180-second timed-pause-style test with cookie `102`. **Select** requests cancellation of scheduled test Wakeups; verify no callback/launch occurs at its scheduled deadline. Record the observed elapsed time and emulator version. A callback log's `haptic_requested=1` means the app called the haptic API; it does not establish physical haptic delivery. If compilation fails, retain the exact compiler output and report it before changing API calls.
 
@@ -44,17 +49,17 @@ In the app, press **Up**, then leave it normally (for example, use Back; do not 
 | Check | Result |
 |---|---|
 | Exact target firmware/OS | Blocked — physical device not accessible from this sandbox. |
-| Exact CLI and SDK versions | Owner reports Pebble Tool `5.1.2` and active SDK `4.33.1` in the emulator environment. The project configuration does not pin these versions; the manifest declares Pebble SDK API version `3`. |
+| Exact CLI and SDK versions | Owner reports global Pebble Tool `5.1.2` and active SDK `4.33.1`. Project pins Pebble Tool `5.0.40` / Python 3.13, and owner reports emulator install works with it. The manifest declares Pebble SDK API version `3`; exact C SDK package remains unresolved. |
 | Existing host build artifact evidence | `build/emery/pebble-app.elf` (ARM EABI executable) and `build/sit_stand_go.pbw` are present. `build/config.log` records Waf 2.1.4 and an SDK path at `4.33.1`; no build invocation/exit record is available, so this is evidence of artifacts/configuration, not a verified reproducible build. |
 | Sandbox build attempt | Failed before build — `pebble build` returned `/usr/bin/bash: line 1: pebble: command not found`. The existing artifact was not produced or verified by this sandbox attempt. |
 | Emulator install attempt | Failed before install — `pebble install --emulator emery` returned `/usr/bin/bash: line 1: pebble: command not found`. No build artifact was produced. |
-| Owner-reported emulator install failure | `pebble install --emulator emery` reports `Couldn't launch pypkjs`; after the app is listed as loaded, `libpebble2` raises `KeyError: 'endpoint'` serializing the `WatchVersion` packet for `localhost:60529`. Emulator connection/install does not complete. This is separate from compilation. |
-| Owner-reported C build failure | `pebble build` compiled through the `gabbro` target before `src/c/sit_stand_move.c` failed: `WAKEUP_INVALID_ID` was undeclared and `wakeup_cancel()` returns `void`. Harness changed to remove that macro use and not consume a cancellation return value. Rebuild pending; no successful harness build is claimed. |
-| Owner-reported harness build | Owner confirms `pebble build` succeeds after the Wakeup API corrections. CLI/SDK are Pebble Tool 5.1.2 / SDK 4.33.1. Full output, built target list, and clean/repeat-build result are not recorded. |
-| Starter-app build/install smoke test | Earlier starter-app build/install and button input were owner-confirmed. The current diagnostic harness build is owner-confirmed successful with Tool 5.1.2 / SDK 4.33.1. Its install fails on the pypkjs/libpebble2 `KeyError: 'endpoint'`; reproducibility is not established. |
-| Emulator test | Earlier starter-app launch and button input were confirmed by the owner. Current diagnostic harness does not install because pypkjs fails during emulator communication. No current Wakeup, haptic, foregrounding, or timing result is available. |
-| Emulator phase-deadline Wakeup | Not run — a diagnostic harness is now present in `src/c/sit_stand_move.c` (Up schedules a 120-second phase-style Wakeup). It has not been built or run in this sandbox; occurrence, haptic, foregrounding, and timing remain unobserved. |
-| Emulator timed-pause Wakeup | Not run — a diagnostic harness is now present in `src/c/sit_stand_move.c` (Down schedules a 180-second timed-pause-style Wakeup). It has not been built or run in this sandbox; occurrence, haptic, foregrounding, and timing remain unobserved. |
+| Owner-reported emulator install failure (resolved by locked CLI) | Global Pebble Tool 5.1.2: `pebble install --emulator emery` reported `Couldn't launch pypkjs`; `libpebble2` raised `KeyError: 'endpoint'` serializing `WatchVersion` for `localhost:60529`. Owner reports the install now works when using the project-locked CLI (Tool 5.0.40 / Python 3.13). Full command output and emulator version are not recorded. |
+| Owner-reported C build failure (resolved) | Initial `pebble build` failed because `WAKEUP_INVALID_ID` was undeclared and `wakeup_cancel()` returns `void`. The harness was corrected, and the owner subsequently confirmed `pebble build` succeeds. |
+| Owner-reported harness build | Owner confirms `pebble build` succeeds after the Wakeup API corrections. Global CLI/SDK are Pebble Tool 5.1.2 / SDK 4.33.1. Full output, built target list, and clean/repeat-build result are not recorded. |
+| Starter-app build/install smoke test | Earlier starter-app build/install and button input were owner-confirmed. The current diagnostic harness build is owner-confirmed successful. The global Tool 5.1.2 install failed with `KeyError: 'endpoint'`; owner reports install succeeds with project-locked Tool 5.0.40 / Python 3.13. |
+| Emulator test | Earlier starter-app launch and button input were confirmed by the owner. Owner reports diagnostic harness installs using project-pinned Tool 5.0.40 / Python 3.13 and that the Wakeup test succeeded. Detailed observations were not included. |
+| Emulator phase-deadline Wakeup | Owner reports Wakeup test succeeded in the emulator. Callback log/cookie, app foreground behavior, observed haptic delivery, and measured timing were not individually reported. |
+| Emulator timed-pause Wakeup | Owner reports Wakeup test succeeded in the emulator. Callback log/cookie, app foreground behavior, observed haptic delivery, and measured timing were not individually reported. |
 | Physical phase-deadline Wakeup | Not run — requires the watch and installed test app; occurrence, haptic, foregrounding, and timing are unobserved. |
 | Physical timed-pause Wakeup | Not run — requires the watch and installed test app; occurrence, haptic, foregrounding, and timing are unobserved. |
 | Normal/overdue timing, UTC validity/clock correction, tolerance, Wakeup limits, battery/reliability | Not measured — requires target-device tests; tolerance and required repeat count also need owner agreement. |
