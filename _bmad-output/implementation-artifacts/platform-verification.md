@@ -1,25 +1,25 @@
 # Pebble Time 2 Platform Verification
 
-**Status:** Blocked — no CLI/SDK or emulator is available in this environment; physical-device behavior has not been tested.
+**Status:** Partially verified — the owner reports that the starter app builds and runs in the `emery` emulator with Pebble Tool 5.1.2 and SDK 4.33.1, and recognizes button presses. Physical Pebble Time 2 reminder capabilities remain unverified.
 
 ## Target and environment evidence
 
 | Item | Observed value | Evidence/status |
 |---|---|---|
 | Target hardware | Pebble Time 2 | Owner confirmed access; device is not connected to this sandbox, so firmware/OS is unrecorded. |
-| Emulator | Available to owner | No emulator executable is installed or available on this sandbox `PATH`; emulator install was not possible. |
+| Emulator | `emery` (Pebble Time 2 target) | Owner reports successful install/run and button input in the emulator. Emulator version is not recorded. No emulator executable is installed or available on this sandbox `PATH`. |
 | Python | 3.13.5 | `python3.13 --version` |
 | uv | 0.12.3 | `uv --version` |
-| Pebble CLI | Not installed | `command -v pebble`, `command -v pebble-tool`, and `python3 -m pip show pebble-tool` found no installation. |
+| Pebble CLI | Pebble Tool 5.1.2 on owner's environment | Owner reported `pebble --version` output: `Pebble Tool v5.1.2 (active SDK: v4.33.1)`. The CLI is not installed on this sandbox `PATH`. |
 | App source and manifest | Starter app and manifest present | `src/c/sit_stand_move.c`, `wscript`, and `package.json` are present; the C app is the Pebble starter screen, not a dedicated verification app. `package.json` targets `emery` (Pebble Time 2) and declares `sdkVersion: "3"`. |
-| Pebble SDK package / exact CLI and SDK pins | Unresolved | The manifest's `sdkVersion: "3"` identifies an API level, not exact CLI/SDK package pins. Existing build configuration records an SDK/toolchain path at version `4.33.1`, but the SDK is not installed in this sandbox and the CLI version/command is not recorded. |
+| Pebble SDK package / exact CLI and SDK pins | Observed versions, project pins unresolved | Owner reports Pebble Tool 5.1.2 and SDK 4.33.1. The manifest's `sdkVersion: "3"` identifies an API level, not exact CLI/SDK package pins. The SDK is not installed in this sandbox. |
 | CLI installation documentation | Not retrieved | `curl -L --max-time 30 --fail --silent --show-error https://developer.repebble.com/sdk/` returned HTTP 403 in this environment. |
 
-These are environment observations only. The documented `pebble-tool` 5.0.18 / Python 3.13 baseline in the architecture is a candidate, not a verified pin. A local SDK/toolchain configuration log reports `4.33.1`, but does not identify an independently reproducible CLI command or a verified package pin. No CLI/SDK install, successful build in this sandbox, emulator launch, successful app install, or physical-watch test was performed.
+The owner reports running `pebble build` and `pebble install --emulator emery`; the emulator app recognized button presses. The reported toolchain was Pebble Tool 5.1.2 with active SDK 4.33.1, and the CLI output stated `SDK 4.33.1 is already installed.` This is owner-reported emulator smoke-test evidence; the full command output, a clean/repeated build, and emulator version are not recorded. The CLI is absent from this sandbox, and no physical-watch test was performed. The architecture's older `pebble-tool` 5.0.18 baseline is superseded as a candidate by the observed 5.1.2 environment, but the project's toolchain is not yet pinned in configuration.
 
 ## Reproducibility and device test plan
 
-Once the CLI instructions and exact compatible SDK package are available:
+For reproducible verification and physical-device acceptance:
 
 1. Record the Pebble Time 2 firmware/OS and emulator version. Install the CLI using the approved RePebble instructions, pin its exact version and the exact SDK package/version in the test app's build configuration, then capture all installation commands and version output.
 2. Build a minimal watch app and record the exact build command, exit result, artifact identity, install command, and install result separately for emulator and physical watch. Repeat the clean build to establish reproducibility.
@@ -33,14 +33,14 @@ Once the CLI instructions and exact compatible SDK package are available:
 | Check | Result |
 |---|---|
 | Exact target firmware/OS | Blocked — physical device not accessible from this sandbox. |
-| Exact CLI and SDK pins | Blocked — CLI is not installed and the installation guide returned 403. The manifest declares Pebble SDK API version `3`; existing build configuration references SDK/toolchain `4.33.1`, but neither establishes the CLI version or a reproducible version pin. |
+| Exact CLI and SDK versions | Owner reports Pebble Tool `5.1.2` and active SDK `4.33.1` in the emulator environment. The project configuration does not pin these versions; the manifest declares Pebble SDK API version `3`. |
 | Existing host build artifact evidence | `build/emery/pebble-app.elf` (ARM EABI executable) and `build/sit_stand_go.pbw` are present. `build/config.log` records Waf 2.1.4 and an SDK path at `4.33.1`; no build invocation/exit record is available, so this is evidence of artifacts/configuration, not a verified reproducible build. |
 | Sandbox build attempt | Failed before build — `pebble build` returned `/usr/bin/bash: line 1: pebble: command not found`. The existing artifact was not produced or verified by this sandbox attempt. |
 | Emulator install attempt | Failed before install — `pebble install --emulator emery` returned `/usr/bin/bash: line 1: pebble: command not found`. No build artifact was produced. |
-| Reproducible minimal-app build/install | Blocked — CLI/SDK unavailable; the repository starter app has not been built or installed. |
-| Emulator test | Not run — emulator unavailable in this environment and no app could be installed. |
-| Emulator phase-deadline Wakeup | Not run — no emulator or installed test app; occurrence, haptic, foregrounding, and timing are unobserved. |
-| Emulator timed-pause Wakeup | Not run — no emulator or installed test app; occurrence, haptic, foregrounding, and timing are unobserved. |
+| Starter-app build/install smoke test | Owner reports running `pebble build` and `pebble install --emulator emery`; app runs and recognizes buttons. Toolchain: Pebble Tool 5.1.2, SDK 4.33.1. Full command output, emulator version, and repeat-build result are unrecorded, so reproducibility is not established. |
+| Emulator test | Basic app launch and button input confirmed by owner on `emery`. This does not verify Wakeups, haptics, foregrounding, or timing. The sandbox itself has no emulator available. |
+| Emulator phase-deadline Wakeup | Not run — reminder behavior is not implemented in the current starter app; occurrence, haptic, foregrounding, and timing are unobserved. |
+| Emulator timed-pause Wakeup | Not run — reminder behavior is not implemented in the current starter app; occurrence, haptic, foregrounding, and timing are unobserved. |
 | Physical phase-deadline Wakeup | Not run — requires the watch and installed test app; occurrence, haptic, foregrounding, and timing are unobserved. |
 | Physical timed-pause Wakeup | Not run — requires the watch and installed test app; occurrence, haptic, foregrounding, and timing are unobserved. |
 | Normal/overdue timing, UTC validity/clock correction, tolerance, Wakeup limits, battery/reliability | Not measured — requires target-device tests; tolerance and required repeat count also need owner agreement. |
