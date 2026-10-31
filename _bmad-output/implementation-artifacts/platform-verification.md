@@ -15,7 +15,7 @@
 | Pebble SDK package / exact CLI and SDK pins | CLI pin added; SDK pin unresolved | Project now pins Pebble Tool 5.0.40 in `pyproject.toml`; the manifest's `sdkVersion: "3"` identifies an API level, not an exact C SDK package. Owner's active SDK is reported as 4.33.1; SDK selection is not verified in this sandbox. |
 | CLI installation documentation | Not retrieved | `curl -L --max-time 30 --fail --silent --show-error https://developer.repebble.com/sdk/` returned HTTP 403 in this environment. |
 
-The owner reports that the earlier starter-app revision built and ran in `emery`, where buttons were recognized. The global CLI was Pebble Tool 5.1.2 with active SDK 4.33.1; CLI output stated `SDK 4.33.1 is already installed.` Installing with that global tool failed in `pypkjs` / `libpebble2` during `WatchVersion` serialization (`KeyError: 'endpoint'` at `localhost:60529`); its traceback path used Python 3.15. The project now pins Tool 5.0.40 and Python 3.13, and the owner reports the diagnostic harness installs successfully using the project-locked CLI. This points to that toolchain resolving the install issue, although it does not isolate CLI-version and Python-version effects. Emulator version, full successful output, and clean/repeated build are unrecorded. Emulator Wakeup behavior and physical-watch results have not yet been reported. The reported C SDK 4.33.1 still needs separate version control.
+The owner reports that the earlier starter-app revision built and ran in `emery`, where buttons were recognized. The global CLI was Pebble Tool 5.1.2 with active SDK 4.33.1; CLI output stated `SDK 4.33.1 is already installed.` Installing with that global tool failed in `pypkjs` / `libpebble2` during `WatchVersion` serialization (`KeyError: 'endpoint'` at `localhost:60529`); its traceback path used Python 3.15. The project now pins Tool 5.0.40 and Python 3.13, and the owner reports the diagnostic harness installs successfully using the project-locked CLI. The owner also reports that the emulator Wakeup test succeeded. These reports point to the locked toolchain resolving the install issue and emulator Wakeup delivery, although they do not isolate CLI-version and Python-version effects or provide callback logs and measurements. Emulator version, full successful output, and clean/repeated build are unrecorded. Physical-watch results have not yet been reported. The reported C SDK 4.33.1 still needs separate version control.
 
 ## Reproducibility and device test plan
 
@@ -63,5 +63,21 @@ In the app, press **Up**, then leave it normally (for example, use Back; do not 
 | Physical phase-deadline Wakeup | Not run — requires the watch and installed test app; occurrence, haptic, foregrounding, and timing are unobserved. |
 | Physical timed-pause Wakeup | Not run — requires the watch and installed test app; occurrence, haptic, foregrounding, and timing are unobserved. |
 | Normal/overdue timing, UTC validity/clock correction, tolerance, Wakeup limits, battery/reliability | Not measured — requires target-device tests; tolerance and required repeat count also need owner agreement. |
+
+### Current sandbox verification
+
+Commands run in this sandbox on 2026-10-31:
+
+| Command | Result |
+|---|---|
+| `python3 --version` | `Python 3.13.5` |
+| `uv --version` | `uv 0.12.3 (aarch64-unknown-linux-gnu)` |
+| `command -v pebble`, `command -v pebble-tool`, `command -v pebble-emulator` | No executable found for any of the three commands. |
+| `uv lock --check --offline` | Passed — `Resolved 53 packages in 1ms`; lockfile is consistent. This does not install or execute the CLI. |
+| `pebble build` | Failed before build: `/usr/bin/bash: line 1: pebble: command not found`. |
+| `pebble install --emulator emery` | Failed before install: `/usr/bin/bash: line 1: pebble: command not found`. |
+| `file build/emery/pebble-app.elf build/sit_stand_go.pbw` | Existing ELF is 32-bit ARM EABI5; PBW is a ZIP archive. Existing artifacts do not establish that the current source builds reproducibly. |
+
+The host-side failures above are this sandbox's own observed results; they do not contradict the owner's separate report of successful locked-CLI build/install and emulator Wakeup testing.
 
 **Gate decision:** Not passed. This report does not establish Pebble Time 2 firmware capability. Continue after obtaining accessible installation instructions and running the test plan on the owner's host/emulator and physical watch; capture exact command output and device observations here.
