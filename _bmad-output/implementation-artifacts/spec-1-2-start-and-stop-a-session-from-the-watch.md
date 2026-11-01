@@ -86,3 +86,24 @@ Implemented the event-queued session coordinator, 33-byte versioned persistent r
 - patch — Overdue recovery previously looped once per missed phase; it now skips whole 60-minute cycles arithmetically before processing the remaining phases.
 - false — Launch repair can fail after orphan cleanup, but it surfaces a scheduling/storage error and leaves only the committed state authoritative, consistent with launch repair's no-automatic-retry rule.
 - deferred — Direct Pebble MenuLayer/button integration is not exercised by the coordinator tests; they verify Start/Stop menu-row dispatch at the coordinator entry point, and source inspection confirms the native callback forwards its selected row there. Exercising the actual UI callback requires the unavailable Pebble SDK/runtime.
+
+### Review round 2 (adversarial, edge-case, verification-gap)
+
+- patch — The menu replaced the main window's click config and was destroyed inside its own select callback. It now lives in its own `s_menu_window` that is pushed and popped, and BACK is handled by the window stack. Not compiled or run: the Pebble SDK is unavailable here.
+- patch — `prv_schedule` treated only `-1` as a failed `wakeup_schedule`. Any negative status now fails, and a test covers `E_RANGE`.
+- patch — `get_view` re-enqueued a day rollover on every call when the write failed or `localtime()` returned NULL. It is now requested at most once per day, and never for day 0. A test counts the write attempts.
+- patch — A failed re-schedule during launch repair left the record running with a Wakeup id that `wakeup_cancel_all` had just removed. The id is now invalidated in memory.
+- patch — `session_store_clear` compared the `persist_delete` status as a bool. It now checks `S_SUCCESS`, and the stub uses `status_t`-style codes.
+- patch — Test setup used `assert()` around side effects. It now uses `prv_save` and `prv_check`.
+- patch — Verification gaps closed with tests: Wakeup cookie, rollover, multi-cycle catch-up and overdue recovery tables, early callback, persisted state after a failed Stop, menu row contract, store round trip, and store reject cases. `scripts/test.sh` runs the C and Python tests.
+- deferred — A full event queue drops the new event, which may be a Wakeup or Stop. Reserving slots or coalescing needs a queue design decision.
+- deferred — A failed due transition or launch repair does not retry, which is consistent with the earlier `false` entries. The edge-case and adversarial lenses both flag the frozen "00:00" outcome, so a retry policy needs a decision before release.
+- deferred — `s_error` is cleared only by a successful Start, Stop, or Wakeup commit, so stale errors can stay visible.
+- deferred — A backward clock correction can leave the countdown above the phase duration. `remaining_seconds` is not clamped.
+- deferred — Any `now > 0` counts as valid UTC. A minimum plausible time is not enforced.
+- deferred — An invalid stored record is reset only in memory, so it is reported again on each launch until a Start overwrites it. The generation also restarts at 1.
+- deferred — `session_coordinator_deinit` does not flush the queue or unsubscribe the Wakeup handler.
+- deferred — The layout uses fixed 144x168 offsets, and the 1 s refresh timer runs while inactive. Both belong with the physical-device pass in Story 1.8.
+- deferred — Pause and Skip stay selectable no-ops until Stories 1.4 and 1.6. Pausing and skipping, and phase haptics, stay with Stories 1.4, 1.6, and 1.3.
+- deferred — The multi-cycle arithmetic in `prv_reconcile_phase` is an optimization. Replacing it with a single-step loop gives the same result, so no behavioral test can pin it.
+- false — `tests/test_pebble_wrapper.py` belongs to the Story 1.1 SDK-pin commit (`7fa97ee`), not to this story's code.
