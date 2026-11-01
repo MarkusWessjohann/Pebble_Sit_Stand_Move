@@ -21,7 +21,6 @@ WakeupId wakeup_schedule(time_t timestamp, int32_t cookie, bool notify_if_missed
 void wakeup_cancel(WakeupId id);
 void wakeup_cancel_all(void);
 void wakeup_service_subscribe(WakeupHandler handler);
-void wakeup_service_unsubscribe(void);
 bool wakeup_get_launch_event(WakeupId *id, int32_t *cookie);
 int launch_reason(void);
 AppTimer *app_timer_register(uint32_t timeout_ms, AppTimerCallback callback, void *context);

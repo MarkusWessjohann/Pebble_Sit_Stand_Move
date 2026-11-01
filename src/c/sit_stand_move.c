@@ -41,7 +41,7 @@ static const char *prv_phase_name(SessionPhase phase) {
   }
 }
 
-static void prv_draw_icon(GContext *ctx, Layer *layer) {
+static void prv_draw_icon(Layer *layer, GContext *ctx) {
   SessionView view;
   session_coordinator_get_view(&view);
   GRect bounds = layer_get_bounds(layer);
@@ -86,7 +86,7 @@ static void prv_render(void) {
 
   if (view.record.lifecycle == SESSION_RUNNING) {
     snprintf(s_countdown_text, sizeof(s_countdown_text), "%02d:%02d",
-             view.remaining_seconds / 60, view.remaining_seconds % 60);
+             (int)(view.remaining_seconds / 60), (int)(view.remaining_seconds % 60));
     snprintf(s_phase_text, sizeof(s_phase_text), "%s", prv_phase_name(view.record.phase));
   } else {
     snprintf(s_countdown_text, sizeof(s_countdown_text), "--:--");

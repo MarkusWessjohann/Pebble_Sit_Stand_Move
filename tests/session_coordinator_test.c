@@ -88,10 +88,6 @@ void wakeup_service_subscribe(WakeupHandler handler) {
   s_wakeup_handler = handler;
 }
 
-void wakeup_service_unsubscribe(void) {
-  s_wakeup_handler = NULL;
-}
-
 bool wakeup_get_launch_event(WakeupId *id, int32_t *cookie) {
   (void)id;
   (void)cookie;

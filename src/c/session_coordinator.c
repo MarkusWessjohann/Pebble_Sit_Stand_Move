@@ -395,7 +395,6 @@ void session_coordinator_deinit(void) {
     app_timer_cancel(s_drain_timer);
     s_drain_timer = NULL;
   }
-  wakeup_service_unsubscribe();
 }
 
 void session_coordinator_start(void) {
