@@ -31,6 +31,7 @@ static SessionEvent s_queue[SESSION_QUEUE_SIZE];
 static uint8_t s_queue_read;
 static uint8_t s_queue_count;
 static AppTimer *s_drain_timer;
+static int32_t s_rollover_requested_day;
 
 static SessionPhase prv_next_phase(SessionPhase phase);
 static int32_t prv_duration(SessionPhase phase);
@@ -76,7 +77,7 @@ static bool prv_schedule(SessionRecord *candidate, WakeupId *id) {
     return false;
   }
   *id = wakeup_schedule((time_t)candidate->deadline_utc, (int32_t)candidate->generation, false);
-  return *id != (WakeupId)-1;
+  return *id >= 0;
 }
 
 static void prv_commit_failure(bool storage_failure) {
@@ -200,6 +201,8 @@ static void prv_recover(void) {
   }
   WakeupId id;
   SessionRecord candidate = s_record;
+  /* cancel_all already removed the stored Wakeup; never present it as scheduled. */
+  s_record.wakeup_id = (WakeupId)-1;
   if (!prv_schedule(&candidate, &id)) {
     s_error = SESSION_ERROR_WAKEUP;
     return;
@@ -379,6 +382,7 @@ void session_coordinator_init(void) {
   s_queue_read = 0;
   s_queue_count = 0;
   s_drain_timer = NULL;
+  s_rollover_requested_day = 0;
   wakeup_service_subscribe(session_coordinator_wakeup);
   session_coordinator_recover();
   if (launch_reason() == APP_LAUNCH_WAKEUP) {
@@ -420,8 +424,12 @@ void session_coordinator_wakeup(WakeupId id, int32_t cookie) {
 
 void session_coordinator_get_view(SessionView *view) {
   time_t now = time(NULL);
-  if (prv_valid_utc(now) && prv_local_day(now) != s_record.tally_day) {
-    prv_enqueue((SessionEvent){ .type = EVENT_DAY_ROLLOVER });
+  if (prv_valid_utc(now)) {
+    int32_t day = prv_local_day(now);
+    if (day != 0 && day != s_record.tally_day && day != s_rollover_requested_day) {
+      s_rollover_requested_day = day;
+      prv_enqueue((SessionEvent){ .type = EVENT_DAY_ROLLOVER });
+    }
   }
   view->record = s_record;
   view->error = s_error;

@@ -99,5 +99,5 @@ bool session_store_save(const SessionRecord *record) {
 }
 
 bool session_store_clear(void) {
-  return persist_delete(SESSION_STORE_KEY);
+  return persist_delete(SESSION_STORE_KEY) == S_SUCCESS;
 }

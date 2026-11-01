@@ -11,6 +11,7 @@ static Layer *s_icon_layer;
 static TextLayer *s_phase_layer;
 static TextLayer *s_tally_layer;
 static TextLayer *s_error_layer;
+static Window *s_menu_window;
 static MenuLayer *s_menu_layer;
 static AppTimer *s_refresh_timer;
 static char s_time_text[16];
@@ -137,52 +138,51 @@ static void prv_menu_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex 
   menu_cell_basic_draw(ctx, cell_layer, title, NULL, NULL);
 }
 
+static void prv_render_cb(void *context) {
+  (void)context;
+  if (s_time_layer) {
+    prv_render();
+  }
+}
+
 static void prv_menu_select(MenuLayer *menu_layer, MenuIndex *cell_index, void *context) {
   (void)menu_layer;
   (void)context;
-  session_coordinator_select_menu_row(cell_index->row);
   SessionView view;
   session_coordinator_get_view(&view);
-  if (view.record.lifecycle == SESSION_RUNNING && cell_index->row < 2) {
+  bool unimplemented = view.record.lifecycle == SESSION_RUNNING && cell_index->row < 2;
+  session_coordinator_select_menu_row(cell_index->row);
+  if (unimplemented) {
     return;
   }
-  menu_layer_destroy(s_menu_layer);
-  s_menu_layer = NULL;
-  prv_render();
+  window_stack_pop(true);
+  app_timer_register(5, prv_render_cb, NULL);
 }
 
-static void prv_open_menu(void) {
-  if (s_menu_layer) {
-    return;
-  }
-  Layer *root = window_get_root_layer(s_window);
-  GRect bounds = layer_get_bounds(root);
-  s_menu_layer = menu_layer_create(bounds);
+static void prv_menu_window_load(Window *window) {
+  Layer *root = window_get_root_layer(window);
+  s_menu_layer = menu_layer_create(layer_get_bounds(root));
   menu_layer_set_callbacks(s_menu_layer, NULL, (MenuLayerCallbacks){
     .get_num_rows = prv_menu_num_rows,
     .draw_row = prv_menu_draw_row,
     .select_click = prv_menu_select,
   });
-  menu_layer_set_click_config_onto_window(s_menu_layer, s_window);
+  menu_layer_set_click_config_onto_window(s_menu_layer, window);
   layer_add_child(root, menu_layer_get_layer(s_menu_layer));
-  menu_layer_reload_data(s_menu_layer);
+}
+
+static void prv_menu_window_unload(Window *window) {
+  (void)window;
+  menu_layer_destroy(s_menu_layer);
+  s_menu_layer = NULL;
 }
 
 static void prv_select_click_handler(ClickRecognizerRef recognizer, void *context) {
-  prv_open_menu();
-}
-
-static void prv_back_click_handler(ClickRecognizerRef recognizer, void *context) {
-  if (s_menu_layer) {
-    menu_layer_destroy(s_menu_layer);
-    s_menu_layer = NULL;
-  }
-  prv_render();
+  window_stack_push(s_menu_window, true);
 }
 
 static void prv_click_config_provider(void *context) {
   window_single_click_subscribe(BUTTON_ID_SELECT, prv_select_click_handler);
-  window_single_click_subscribe(BUTTON_ID_BACK, prv_back_click_handler);
 }
 
 static void prv_window_load(Window *window) {
@@ -222,10 +222,6 @@ static void prv_window_load(Window *window) {
 }
 
 static void prv_window_unload(Window *window) {
-  if (s_menu_layer) {
-    menu_layer_destroy(s_menu_layer);
-    s_menu_layer = NULL;
-  }
   text_layer_destroy(s_time_layer);
   text_layer_destroy(s_countdown_layer);
   layer_destroy(s_icon_layer);
@@ -248,6 +244,11 @@ static void prv_init(void) {
     .load = prv_window_load,
     .unload = prv_window_unload,
   });
+  s_menu_window = window_create();
+  window_set_window_handlers(s_menu_window, (WindowHandlers){
+    .load = prv_menu_window_load,
+    .unload = prv_menu_window_unload,
+  });
   window_stack_push(s_window, true);
   s_refresh_timer = app_timer_register(1000, prv_refresh, NULL);
 }
@@ -257,6 +258,7 @@ static void prv_deinit(void) {
     app_timer_cancel(s_refresh_timer);
   }
   session_coordinator_deinit();
+  window_destroy(s_menu_window);
   window_destroy(s_window);
 }
 

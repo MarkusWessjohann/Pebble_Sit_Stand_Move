@@ -12,6 +12,14 @@ uv run --locked python scripts/pebble.py install --phone <ip>           # instal
 
 The lockfile fixes the project's Python CLI dependency set to Pebble Tool 5.0.40 and its transitive Python dependencies; `.python-version` pins Python 3.13.5. `.pebble-sdk-version` pins the active host C SDK to 4.33.1. The wrapper checks `pebble sdk list` and refuses to build/install unless the project-pinned SDK is active, then runs the command through the locked CLI. The C SDK is installed separately by the host Pebble SDK manager; activate the pinned version there before using these commands. In `package.json`, `sdkVersion: "3"` remains the manifest API level, not the C SDK package version.
 
+## Tests
+
+```sh
+sh scripts/test.sh    # host-side C coordinator tests (Pebble API stubs) and Python wrapper tests
+```
+
+These do not exercise the Pebble SDK build, the menu UI, or watch firmware.
+
 ## Target platforms
 
 `targetPlatforms` in `package.json` controls which watches you build for. The
