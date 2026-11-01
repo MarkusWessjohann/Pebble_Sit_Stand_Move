@@ -25,6 +25,7 @@ bool wakeup_get_launch_event(WakeupId *id, int32_t *cookie);
 int launch_reason(void);
 AppTimer *app_timer_register(uint32_t timeout_ms, AppTimerCallback callback, void *context);
 void app_timer_cancel(AppTimer *timer);
+void vibes_short_pulse(void);
 
 #define time fake_time
 
@@ -42,3 +43,4 @@ extern int fake_cancel_count;
 extern int fake_cancel_all_count;
 extern WakeupId fake_last_scheduled_id;
 extern time_t fake_last_scheduled_deadline;
+extern int fake_haptic_count;

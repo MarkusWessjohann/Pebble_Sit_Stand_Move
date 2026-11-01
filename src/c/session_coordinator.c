@@ -16,6 +16,7 @@ typedef enum {
   EVENT_RECOVER,
   EVENT_WAKEUP,
   EVENT_DAY_ROLLOVER,
+  EVENT_CLOCK_CHECK,
 } SessionEventType;
 
 typedef struct {
@@ -32,27 +33,47 @@ static uint8_t s_queue_read;
 static uint8_t s_queue_count;
 static AppTimer *s_drain_timer;
 static int32_t s_rollover_requested_day;
+static bool s_clock_check_queued;
 
 static SessionPhase prv_next_phase(SessionPhase phase);
 static int32_t prv_duration(SessionPhase phase);
+static int32_t prv_local_day(time_t now);
 static void prv_rollover_tally(time_t now);
+static void prv_count_completion(SessionRecord *record, SessionPhase phase, int64_t completed_at,
+                                 int32_t today);
+static void prv_reset_tally_day(SessionRecord *record, int32_t day);
 
 static void prv_reconcile_phase(SessionRecord *record, time_t now, bool overdue_recovery) {
-  record->phase = prv_next_phase(record->phase);
-  record->deadline_utc += prv_duration(record->phase);
+  int32_t today = prv_local_day(now);
+  struct tm *local = localtime(&now);
+  int64_t today_start = 0;
+  if (local) {
+    struct tm midnight = *local;
+    midnight.tm_hour = 0;
+    midnight.tm_min = 0;
+    midnight.tm_sec = 0;
+    today_start = (int64_t)mktime(&midnight);
+  }
+  if (today_start > 0 && record->deadline_utc < today_start) {
+    int64_t cycles = (today_start - record->deadline_utc) / 3600;
+    record->deadline_utc += cycles * 3600;
+  }
   bool rebase = overdue_recovery;
-  if (now >= record->deadline_utc) {
-    int64_t elapsed_cycles = ((int64_t)now - record->deadline_utc) / 3600;
-    record->deadline_utc += elapsed_cycles * 3600;
-    while (now >= record->deadline_utc) {
-      record->phase = prv_next_phase(record->phase);
-      record->deadline_utc += prv_duration(record->phase);
+  while (now >= record->deadline_utc) {
+    prv_count_completion(record, record->phase, record->deadline_utc, today);
+    record->phase = prv_next_phase(record->phase);
+    record->deadline_utc += prv_duration(record->phase);
+    if (now >= record->deadline_utc) {
+      rebase = true;
     }
-    rebase = true;
   }
   if (rebase) {
     record->deadline_utc = (int64_t)now + prv_duration(record->phase);
   }
+}
+
+static void prv_request_haptic(void) {
+  vibes_short_pulse();
 }
 
 static bool prv_next_generation(uint32_t current, uint32_t *next) {
@@ -166,20 +187,26 @@ static void prv_recover(void) {
   s_record = loaded;
   s_error = SESSION_ERROR_NONE;
   time_t now;
-  if (prv_read_utc(&now)) {
+  bool valid_time = prv_read_utc(&now);
+  if (valid_time && s_record.lifecycle != SESSION_RUNNING) {
     prv_rollover_tally(now);
   }
   if (s_record.lifecycle != SESSION_RUNNING) {
     return;
   }
 
-  if (!prv_read_utc(&now)) {
+  if (!valid_time) {
+    /* Recovery cleared all alarms, so never expose the persisted ID as scheduled. */
+    s_record.wakeup_id = (WakeupId)-1;
     s_error = SESSION_ERROR_CLOCK;
     return;
   }
+  /* Recovery cleared all alarms, so never expose the persisted ID as scheduled. */
+  s_record.wakeup_id = (WakeupId)-1;
   if (now >= s_record.deadline_utc) {
     SessionRecord reconciled = s_record;
     prv_reconcile_phase(&reconciled, now, true);
+    prv_reset_tally_day(&reconciled, prv_local_day(now));
     if (!prv_next_generation(reconciled.generation, &reconciled.generation)) {
       s_error = SESSION_ERROR_STORAGE;
       return;
@@ -191,16 +218,20 @@ static void prv_recover(void) {
       return;
     }
     reconciled.wakeup_id = id;
+    reconciled.haptic_generation = reconciled.generation;
     if (!session_store_save(&reconciled)) {
       wakeup_cancel(id);
       s_error = SESSION_ERROR_STORAGE;
       return;
     }
     s_record = reconciled;
+    prv_request_haptic();
+    s_error = SESSION_ERROR_NONE;
     return;
   }
   WakeupId id;
   SessionRecord candidate = s_record;
+  prv_reset_tally_day(&candidate, prv_local_day(now));
   /* cancel_all already removed the stored Wakeup; never present it as scheduled. */
   s_record.wakeup_id = (WakeupId)-1;
   if (!prv_schedule(&candidate, &id)) {
@@ -231,6 +262,35 @@ static int32_t prv_local_day(time_t now) {
   return local ? (local->tm_year + 1900) * 1000 + local->tm_yday : 0;
 }
 
+static void prv_count_completion(SessionRecord *record, SessionPhase phase, int64_t completed_at,
+                                 int32_t today) {
+  time_t completion_time = (time_t)completed_at;
+  if (today == 0 || prv_local_day(completion_time) != today) {
+    return;
+  }
+  if (record->tally_day != today) {
+    record->tally_day = today;
+    record->sit_count = 0;
+    record->stand_count = 0;
+    record->move_count = 0;
+  }
+  uint16_t *count = phase == SESSION_PHASE_SIT ? &record->sit_count :
+                    phase == SESSION_PHASE_STAND ? &record->stand_count : &record->move_count;
+  if (*count < 999) {
+    ++*count;
+  }
+}
+
+static void prv_reset_tally_day(SessionRecord *record, int32_t day) {
+  if (day == 0 || day == record->tally_day) {
+    return;
+  }
+  record->tally_day = day;
+  record->sit_count = 0;
+  record->stand_count = 0;
+  record->move_count = 0;
+}
+
 static void prv_rollover_tally(time_t now) {
   int32_t day = prv_local_day(now);
   if (day == 0 || day == s_record.tally_day) {
@@ -256,10 +316,13 @@ static void prv_wakeup(const SessionEvent *event) {
   time_t now;
   if (!prv_read_utc(&now)) {
     s_error = SESSION_ERROR_CLOCK;
+    wakeup_cancel(event->wakeup_id);
+    s_record.wakeup_id = (WakeupId)-1;
     return;
   }
   if (now < s_record.deadline_utc) {
     SessionRecord candidate = s_record;
+    WakeupId old_id = s_record.wakeup_id;
     WakeupId id;
     if (!prv_schedule(&candidate, &id)) {
       s_error = SESSION_ERROR_WAKEUP;
@@ -272,6 +335,7 @@ static void prv_wakeup(const SessionEvent *event) {
       return;
     }
     s_record = candidate;
+    wakeup_cancel(old_id);
     return;
   }
 
@@ -281,6 +345,7 @@ static void prv_wakeup(const SessionEvent *event) {
     s_error = SESSION_ERROR_STORAGE;
     return;
   }
+  candidate.haptic_generation = candidate.generation;
   candidate.wakeup_id = (WakeupId)-1;
   WakeupId id;
   if (!prv_schedule(&candidate, &id)) {
@@ -296,6 +361,7 @@ static void prv_wakeup(const SessionEvent *event) {
   }
   s_record = candidate;
   wakeup_cancel(old_id);
+  prv_request_haptic();
   s_error = SESSION_ERROR_NONE;
 }
 
@@ -328,8 +394,32 @@ static void prv_process(const SessionEvent *event) {
     }
     return;
   }
+  if (event->type == EVENT_CLOCK_CHECK) {
+    s_clock_check_queued = false;
+    if (s_record.lifecycle == SESSION_RUNNING) {
+      time_t clock_now;
+      if (!prv_read_utc(&clock_now)) {
+        bool was_clock_error = s_error == SESSION_ERROR_CLOCK;
+        s_error = SESSION_ERROR_CLOCK;
+        if (!was_clock_error && s_record.wakeup_id >= 0) {
+          wakeup_cancel(s_record.wakeup_id);
+          s_record.wakeup_id = (WakeupId)-1;
+        }
+      } else if (s_error == SESSION_ERROR_CLOCK) {
+        prv_recover();
+      } else if ((s_error == SESSION_ERROR_NONE || s_error == SESSION_ERROR_QUEUE) &&
+                 clock_now >= s_record.deadline_utc &&
+                 s_record.wakeup_id >= 0) {
+        SessionEvent due = { .type = EVENT_WAKEUP, .wakeup_id = s_record.wakeup_id,
+                             .cookie = (int32_t)s_record.generation };
+        prv_wakeup(&due);
+      }
+    }
+    return;
+  }
   if (event->type == EVENT_START) {
-    if (s_record.lifecycle == SESSION_RUNNING && s_record.deadline_utc > 0 &&
+    if (s_record.lifecycle == SESSION_RUNNING && s_error != SESSION_ERROR_WAKEUP &&
+        s_error != SESSION_ERROR_STORAGE && s_record.deadline_utc > 0 &&
         prv_read_utc(&now) && now >= s_record.deadline_utc) {
       SessionEvent due = { .type = EVENT_WAKEUP, .wakeup_id = s_record.wakeup_id,
                            .cookie = (int32_t)s_record.generation };
@@ -337,7 +427,8 @@ static void prv_process(const SessionEvent *event) {
     }
     prv_start();
   } else if (event->type == EVENT_STOP) {
-    if (s_record.lifecycle == SESSION_RUNNING && s_record.deadline_utc > 0 &&
+    if (s_record.lifecycle == SESSION_RUNNING && s_error != SESSION_ERROR_WAKEUP &&
+        s_error != SESSION_ERROR_STORAGE && s_record.deadline_utc > 0 &&
         prv_read_utc(&now) && now >= s_record.deadline_utc) {
       SessionEvent due = { .type = EVENT_WAKEUP, .wakeup_id = s_record.wakeup_id,
                            .cookie = (int32_t)s_record.generation };
@@ -358,10 +449,10 @@ static void prv_drain(void *context) {
   }
 }
 
-static void prv_enqueue(SessionEvent event) {
+static bool prv_enqueue(SessionEvent event) {
   if (s_queue_count == SESSION_QUEUE_SIZE) {
     s_error = SESSION_ERROR_QUEUE;
-    return;
+    return false;
   }
   uint8_t write = (s_queue_read + s_queue_count) % SESSION_QUEUE_SIZE;
   s_queue[write] = event;
@@ -372,6 +463,7 @@ static void prv_enqueue(SessionEvent event) {
       prv_drain(NULL);
     }
   }
+  return true;
 }
 
 void session_coordinator_init(void) {
@@ -383,6 +475,7 @@ void session_coordinator_init(void) {
   s_queue_count = 0;
   s_drain_timer = NULL;
   s_rollover_requested_day = 0;
+  s_clock_check_queued = false;
   wakeup_service_subscribe(session_coordinator_wakeup);
   session_coordinator_recover();
   if (launch_reason() == APP_LAUNCH_WAKEUP) {
@@ -424,11 +517,19 @@ void session_coordinator_wakeup(WakeupId id, int32_t cookie) {
 
 void session_coordinator_get_view(SessionView *view) {
   time_t now = time(NULL);
+  if (s_record.lifecycle == SESSION_RUNNING && !s_clock_check_queued) {
+    s_clock_check_queued = true;
+    if (!prv_enqueue((SessionEvent){ .type = EVENT_CLOCK_CHECK })) {
+      s_clock_check_queued = false;
+    }
+  }
   if (prv_valid_utc(now)) {
     int32_t day = prv_local_day(now);
     if (day != 0 && day != s_record.tally_day && day != s_rollover_requested_day) {
       s_rollover_requested_day = day;
-      prv_enqueue((SessionEvent){ .type = EVENT_DAY_ROLLOVER });
+      if (!prv_enqueue((SessionEvent){ .type = EVENT_DAY_ROLLOVER })) {
+        s_rollover_requested_day = 0;
+      }
     }
   }
   view->record = s_record;
