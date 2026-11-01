@@ -7,7 +7,7 @@ paradigm: event-driven state machine
 scope: Pebble Time 2 sit/stand/move reminder app
 status: final
 created: 2026-10-21
-updated: 2026-10-21
+updated: 2026-10-31
 binds: [FR-1, FR-2, FR-3, FR-4, FR-5, FR-6, FR-7, UJ-1, UJ-2]
 sources:
   - _bmad-output/planning-artifacts/prds/prd-sit_stand_go-2026-10-21/prd.md
@@ -38,7 +38,7 @@ An event-driven state machine in one native Pebble C watch app. One session coor
 
 - **Binds:** FR-2, FR-3, FR-5–FR-7
 - **Prevents:** Depending on the display being foregrounded or maintaining a continuously running process for each phase timer.
-- **Rule:** Use the Pebble Wakeup API to schedule the next phase deadline; the coordinator is the only scheduler client. Set `notify_if_missed = false`; app recovery owns phase reconciliation and its single current-phase haptic. Apply AD-11's schedule/commit ordering, generation cookie, stale-callback checks, and recovery protocol. Verify Wakeup support and notification behavior on target Pebble Time 2 firmware before implementation.
+- **Rule:** Use the Pebble Wakeup API to schedule the next phase deadline; the coordinator is the only scheduler client. Set `notify_if_missed = false`; app recovery owns phase reconciliation and its single current-phase haptic. Apply AD-11's schedule/commit ordering, generation cookie, stale-callback checks, and recovery protocol. Establish pinned, reproducible toolchain/build readiness before implementation; verify Wakeup support and notification behavior on target Pebble Time 2 firmware with the finished app at the pre-release Story 1.8 gate.
 
 - **Operational boundary:** The user requires the timer to continue when they leave the app; continued operation after explicitly terminating the app is not required. Verify the leave-app behavior on device.
 
@@ -149,9 +149,9 @@ An event-driven state machine in one native Pebble C watch app. One session coor
 
 | Name | Version |
 | --- | --- |
-| Pebble Time 2 | Target device; firmware/OS version not yet verified |
-| Rebble `pebble-tool` CLI | 5.0.18 documented; use Python 3.13 |
-| Pebble C SDK | `latest` via documented CLI install; exact SDK package and Time 2 compatibility must be pinned/verified before implementation |
+| Pebble Time 2 | Target device; firmware/OS version to be recorded during Story 1.8 pre-release acceptance |
+| Pebble Tool CLI | Project pin 5.0.40; use Python 3.13; verify reproducible build/install before implementation |
+| Pebble C SDK | Exact package/version remains unresolved and must be pinned before implementation; physical-device compatibility is verified in Story 1.8 before release |
 
 ## Structural Seed
 
@@ -193,11 +193,11 @@ src/
 
 ## Deferred
 
-- **Pre-implementation device and operational acceptance gate:** record exact Pebble Time 2 firmware/OS and CLI/SDK build IDs; build/install a minimal watch app and separately verify phase-deadline and timed-pause Wakeups, haptic delivery, and UI foregrounding after leaving the app. Exercise normal deadline; Skip haptic; manual Pause/Resume with no Wakeup; Timed Pause +5/+10/+30 and pause-end resume same Phase with saved remaining duration and one haptic; manual resume before pause end cancels Wakeup and stale callback neither vibrates nor reopens; overdue pause-end recovery; phase Pause/Stop cancellation; extension rescheduling; deadline/action race; phase deadline recovery after downtime; invalid UTC; clock corrections; and `notify_if_missed = false`. Inject persistence-write, schedule, cancel, and launch-repair failures and crash at schedule/commit/cancel and haptic-attempt boundaries. Assert lifecycle, phase/remaining duration, both Wakeup identities, generation/callback acceptance, cleanup/retry, UI error state, and haptic count. If timed-pause foreground/haptic is unsupported, revisit the feature before implementation.
-- **SDK/toolchain version pin:** Current Rebble instructions document `pebble-tool` CLI 5.0.18 with Python 3.13 and latest SDK installation; resolve `latest` to an exact SDK package version and commit the build manifest/lock data. Verify a reproducible target build, install, and run on Pebble Time 2 before implementation. (The documented emulator install example uses Pebble Time/Basalt, not Time 2.)
+- **Story 1.8 pre-release physical-device acceptance:** With Stories 1.2–1.7 complete, record exact Pebble Time 2 firmware/OS and toolchain identifiers and test the finished app on the physical target. Separately verify phase-deadline and timed-pause Wakeups after leaving the app, haptic delivery, and UI foregrounding. Exercise normal deadline; Skip haptic; manual Pause/Resume with no Wakeup; Timed Pause +5/+10/+30 and pause-end resume of the same Phase with saved remaining duration and one haptic; manual resume before pause end cancels Wakeup and stale callback neither vibrates nor reopens; overdue pause-end recovery; phase Pause/Stop cancellation; extension rescheduling; deadline/action race; phase deadline recovery after downtime; invalid UTC; clock corrections; and `notify_if_missed = false`. Inject persistence-write, schedule, cancel, and launch-repair failures and crash at schedule/commit/cancel and haptic-attempt boundaries. Assert lifecycle, phase/remaining duration, both Wakeup identities, generation/callback acceptance, cleanup/retry, UI error state, and haptic count. Also agree and verify measurable timing tolerance, Wakeup limits/spacing, battery/reliability, and finished-UI/control legibility. If timed-pause foreground/haptic is unsupported, revisit the feature before release. This acceptance is a release gate, not a pre-implementation gate.
+- **Pre-implementation toolchain readiness (Story 1.1):** Pin the exact CLI, Python, and C SDK package/version and commit the build manifest/lock data. Demonstrate reproducible build/install using the available workflow and record available emulator results separately. Emulator results do not establish physical-device compatibility. The previously documented CLI baseline was `pebble-tool` 5.0.18 with Python 3.13; the project currently pins Pebble Tool 5.0.40 / Python 3.13, while the exact SDK package remains unresolved. (The documented emulator install example uses Pebble Time/Basalt, not Time 2.)
 - **Wakeup constraints:** Pebble SDK documentation states a maximum of eight scheduled wakeups per app and a one-minute exclusion window between scheduled wakeups. The proposed design maintains one persisted `WakeupId`; `notify_if_missed` is false. Confirm runtime behavior on target firmware.
 - **Record encoding and storage keys:** fields and validity contract are fixed by AD-9; concrete encoding and keys are implementation details. Pebble persistent storage allows at most 256 bytes per string/blob and 4 KB total per app; keep the single record compact and check write status.
-- **Timing tolerance:** Define a measurable wakeup tolerance on verified Pebble Time 2 firmware and test forward/backward clock jumps. Invalid-time behavior is fixed in AD-10/AD-12: Start remains inactive with visible error; a running Session retains state and suppresses scheduling/haptics until valid UTC returns, then reconciles.
+- **Timing tolerance:** Agree a measurable wakeup tolerance before Story 1.8 and verify it on Pebble Time 2 with the finished app, including forward/backward clock jumps. Invalid-time behavior is fixed in AD-10/AD-12: Start remains inactive with visible error; a running Session retains state and suppresses scheduling/haptics until valid UTC returns, then reconciles.
 - **Extension UI navigation:** Product decision fixes +5/+10 minute options; detailed Pebble button navigation and selected-state presentation belong to UX, with all choices dispatched through Session Coordinator.
-- **Packaging and release channel:** no existing app repository was present at architecture start; build setup must use pinned CLI/SDK versions and record reproducible build/install steps plus the physical-device verification results.
+- **Packaging and release channel:** build setup must use pinned CLI/SDK versions and record reproducible build/install steps before implementation. Record physical-device verification results from Story 1.8 before release.
 - **Power and operational envelope:** use scheduled wakeups rather than a continuously active worker for the 45/10/5 schedule; verify battery impact and reliability on the physical target.

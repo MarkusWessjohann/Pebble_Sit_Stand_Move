@@ -1,5 +1,6 @@
 ---
 status: final
+updated: 2026-10-31
 stepsCompleted:
   - step-01-validate-prerequisites
   - step-02-design-epics
@@ -37,13 +38,15 @@ FR6: The user can skip the active phase. Skip advances immediately to the next p
 
 FR7: The user can extend the active phase by +5 or +10 minutes. Each extension adds the selected duration to the current deadline, repeated extensions stack, and defaults remain unchanged. Extend is silent; the phase does not advance until the extended deadline unless skipped or stopped.
 
+FR8: Before release, the project owner verifies the finished app on Pebble Time 2, including a full 45/10/5 cycle, background reminder behavior, haptics, app foregrounding, timing, recovery, device limits, reliability, and UI/control usability.
+
 ### NonFunctional Requirements
 
 NFR1: The application targets Pebble Time 2 and must be operable from the watch without phone interaction during a session. Timing must continue after the app leaves the foreground; operation after explicit app termination is not required.
 
 NFR2: Phase and timed-pause deadlines use UTC epoch wall time. Forward clock corrections can make a deadline due; backward corrections defer it. When UTC is invalid, a new session remains inactive with a visible error; an active session preserves saved state and suppresses scheduling/haptics until valid time returns, then reconciles.
 
-NFR3: Define and verify a measurable phase-transition tolerance on the target firmware before implementation. Verify Pebble Time 2 firmware/OS, CLI/SDK versions, Wakeup behavior after leaving the app, haptic delivery, and app foregrounding on physical hardware. Firmware-specific delivery is not guaranteed until these acceptance checks pass.
+NFR3: Before implementation, establish pinned toolchain and reproducible build/install readiness with available workflow and emulator evidence. Before release, verify Pebble Time 2 firmware/OS, Wakeup behavior after leaving the finished app, haptic delivery, app foregrounding, measurable timing tolerance, operational limits, reliability, and finished UI on physical hardware in Story 1.8. Firmware-specific delivery is not guaranteed until those acceptance checks pass.
 
 NFR4: Serialize user commands, Wakeup callbacks, launches, and recovery through one FIFO session coordinator. Reconcile a due deadline before applying a competing command using `now >= deadline`; UI must not independently resolve session timing or races.
 
@@ -55,7 +58,7 @@ NFR7: Preserve the reminder-only MVP scope: no posture/step/movement sensing, he
 
 NFR8: The watch interface must remain legible and textually identify phase, lifecycle state, remaining time, daily totals, and errors using native Pebble presentation. Do not rely on color alone; verify legibility and layout on Pebble Time 2 hardware.
 
-NFR9: Build and installation must be reproducible using pinned, verified Pebble CLI/SDK versions. Resolve the SDK `latest` reference to an exact package version and record build/install and physical-device verification results before implementation is considered ready.
+NFR9: Before implementation, pin the exact Pebble CLI, Python, and C SDK package/version and record reproducible build/install evidence using the available workflow. Record physical-device verification results in Story 1.8 before release; emulator results do not establish physical-device behavior.
 
 ### Additional Requirements
 
@@ -65,12 +68,12 @@ NFR9: Build and installation must be reproducible using pinned, verified Pebble 
 - Schedule/commit ordering and failures must follow AD-11 and AD-13: do not report a proposed mutation as committed if persistence or Wakeup scheduling fails; retain last committed state and only retry failed proposals on the specified explicit user commands.
 - Haptic-attempt state must be persisted before calling the haptic API. Retry only committed transitions without an attempt marker; never replay a marked attempt.
 - Process due phase and timed-pause events through the coordinator before commands; generation increments on lifecycle/deadline mutations. Ignore callbacks made stale by pause, resume, stop, skip, extension, or newer scheduling.
-- Record exact target firmware/OS and toolchain identifiers; test normal and overdue deadlines, timed pause choices and early resume, stale callbacks, skip/extension scheduling, command/deadline races, clock validity and corrections, persistence/schedule/cancel failures, launch repair, and crash boundaries on target hardware.
-- Resolve and pin the Pebble C SDK and CLI; use the documented `pebble-tool` 5.0.18 / Python 3.13 baseline only after verifying exact compatibility. Verify Wakeup constraints and battery/reliability on device. Keep the compact session record within Pebble persistent-storage limits.
+- In pre-release Story 1.8, record exact target firmware/OS and toolchain identifiers; test normal and overdue deadlines, timed pause choices and early resume, stale callbacks, skip/extension scheduling, command/deadline races, clock validity and corrections, persistence/schedule/cancel failures, launch repair, and crash boundaries on target hardware.
+- Story 1.1 resolves and pins the exact Pebble C SDK, CLI, and Python 3.13 environment and records reproducible build/install readiness. Story 1.8 verifies Wakeup constraints and battery/reliability on physical hardware before release. Keep the compact session record within Pebble persistent-storage limits.
 - No starter template is specified in the Architecture. The suggested `src/` files are a structural seed, not a required layout. No separate migration, cloud integration, or deployment service is specified.
 - The product brief confirms watch-first use, the 45/10/5 schedule, manual controls, timed-pause behavior, deterministic recovery, UTC authority, and the out-of-scope items reflected above. Where brief wording differs in detail, the final PRD, Architecture, and UX contract provide the implementation-level requirements.
 - Product/UX decisions confirmed: native menu order is Start when inactive and Pause/Resume, Skip, Stop while active; phase icons are monochrome chair/standing-person/moving-person paired with text; timed-pause alternatives use shorter-on-top and longer-on-bottom (30-minute entry shows 5/10); daily tally uses local calendar day, persists across app restarts, aggregates across sessions, and resets at local midnight.
-- Physical-device decisions still to verify before implementation: Pebble Wakeup delivery after leaving the app, haptic delivery, app foregrounding, and measurable phase-transition tolerance on the target firmware.
+- Physical-device decisions to verify with the finished app before release in Story 1.8: Pebble Wakeup delivery after leaving the app, haptic delivery, app foregrounding, and measurable phase-transition tolerance on the target firmware.
 
 ### UX Design Requirements
 
@@ -109,56 +112,49 @@ FR4: Epic 1 - Manually pause and resume a session.
 FR5: Epic 1 - Take and end a timed pause, including early resume handling.
 FR6: Epic 1 - Skip the active phase.
 FR7: Epic 1 - Extend the active phase by +5 or +10 minutes.
+FR8: Epic 1 - Verify the finished app on Pebble Time 2 before release.
 
 ## Epic List
 
 ### Epic 1: Run and control a sit–stand–move session from the watch
 
-The owner can start and stop a session on Pebble Time 2, follow the repeating Sit/Stand/Move cycle, and manage it with pause, timed pause, skip, and extension controls. The watch shows the current phase and remaining time, and handles reminders and recovery according to the agreed timing rules. Target-device verification of Wakeup, haptic, and app-foreground behavior is a readiness gate for implementation.
+The owner can start and stop a session on Pebble Time 2, follow the repeating Sit/Stand/Move cycle, and manage it with pause, timed pause, skip, and extension controls. The watch shows the current phase and remaining time, and handles reminders and recovery according to the agreed timing rules. Pinned reproducible toolchain/build readiness is a pre-implementation gate; finished-app physical-device verification of Wakeup, haptic, app-foreground behavior, and UI is a pre-release gate in Story 1.8.
 
-**FRs covered:** FR1, FR2, FR3, FR4, FR5, FR6, FR7.
+**FRs covered:** FR1, FR2, FR3, FR4, FR5, FR6, FR7, FR8.
 
 ## Epic 1: Run and control a sit–stand–move session from the watch
 
-The owner can start and stop a session on Pebble Time 2, follow the repeating Sit/Stand/Move cycle, and manage it with pause, timed pause, skip, and extension controls. The watch shows the current phase and remaining time, and handles reminders and recovery according to the agreed timing rules. Target-device verification of Wakeup, haptic, and app-foreground behavior is a readiness gate for implementation.
+The owner can start and stop a session on Pebble Time 2, follow the repeating Sit/Stand/Move cycle, and manage it with pause, timed pause, skip, and extension controls. The watch shows the current phase and remaining time, and handles reminders and recovery according to the agreed timing rules. Pinned reproducible toolchain/build readiness is a pre-implementation gate; finished-app physical-device verification of Wakeup, haptic, app-foreground behavior, and UI is a pre-release gate in Story 1.8.
 
-### Story 1.1: Verify Pebble Time 2 reminder capabilities
+### Story 1.1: Establish Pebble toolchain and emulator readiness
 
 As the project owner,
-I want to verify the target watch's reminder and build capabilities,
-So that I know whether the planned session behavior is feasible before implementation proceeds.
+I want to establish a pinned, reproducible Pebble build/install workflow and record available emulator evidence,
+So that implementation can begin on a known toolchain without treating emulator results as physical-device acceptance.
 
-**Requirements:** NFR1, NFR3, NFR9, UX-DR13.
+**Requirements:** NFR3, NFR9.
 
 **Acceptance Criteria:**
 
-**Given** a Pebble Time 2 and the proposed development toolchain
-**When** the verification is performed
-**Then** the exact device firmware/OS, CLI version, and SDK version are recorded, and the CLI and SDK dependencies are pinned to exact versions.
+**Given** the selected project toolchain
+**When** readiness is established
+**Then** the exact CLI, Python, and C SDK package/version are pinned and recorded, distinguishing manifest SDK API level from package version.
 
-**Given** the pinned toolchain and a minimal test app
-**When** the documented build and install procedure is run
-**Then** it produces a reproducible build/install on the target device, and the exact commands and results are recorded.
+**Given** the pinned toolchain and a minimal diagnostic app
+**When** documented clean/repeated build and available emulator install procedures are run
+**Then** commands, outcomes, and artifact identity are recorded as reproducible; any owner-reported results are identified as such and are not presented as locally verified.
 
-**Given** a minimal test app installed on the target watch
-**When** phase-deadline and timed-pause Wakeups are tested after the app leaves the foreground
-**Then** each test records whether the Wakeup occurs, requests a haptic, and opens or foregrounds the app UI.
+**Given** the diagnostic app is available in the emulator
+**When** phase-deadline and timed-pause Wakeups are observed separately
+**Then** available callback, haptic-request, app-open/foreground, and timing evidence is recorded with its source; emulator observations are not physical-device results.
 
-**Given** the target-device acceptance test plan
-**When** it is prepared for implementation
-**Then** it defines observable checks for normal and overdue Wakeups, invalid UTC and clock corrections, timing tolerance, and Wakeup limits; app-level Pause/Resume, timed-pause, Skip, Extend, race, persistence, cancellation, launch-repair, and haptic-count scenarios are assigned to their implementing stories and do not block this platform-capability story.
+**Given** physical acceptance requires the finished app
+**When** Story 1.1 is handed off
+**Then** the complete Pebble Time 2 device acceptance scope is assigned to Story 1.8 after Stories 1.2–1.7 and before release, with no physical behavior claimed as verified here.
 
-**Given** the target firmware and app configuration
-**When** Wakeup limits and sustained reminder use are tested
-**Then** the documented Wakeup count and spacing constraints are respected and battery/reliability observations are recorded.
-
-**Given** the target-device timing tests
-**When** normal phase-deadline behavior is measured
-**Then** the observed transition timing and an agreed measurable tolerance are documented.
-
-**Given** any required Wakeup, haptic, or foreground behavior cannot be verified or does not work
-**When** the verification results are reported
-**Then** the unmet capability is clearly documented, and implementation of dependent reminder behavior remains gated for a product decision.
+**Given** any toolchain or emulator readiness evidence remains incomplete
+**When** Story 1.1 status is updated
+**Then** the missing evidence is stated and the story remains open; it is not marked done.
 
 ### Story 1.2: Start and stop a session from the watch
 
@@ -167,6 +163,8 @@ I want to start and stop a Sit/Stand/Move session and see its current status,
 So that I can control reminders directly from Pebble Time 2.
 
 **Requirements:** FR1, NFR1, NFR4–NFR5, NFR7–NFR8, UX-DR1–UX-DR5, UX-DR8–UX-DR13.
+
+**Dependency:** Story 1.1's pinned toolchain and reproducible build/install readiness must be complete before implementation stories begin. Physical-device acceptance is deferred to Story 1.8 and does not block this story.
 
 **Acceptance Criteria:**
 
@@ -240,6 +238,8 @@ So that reminders remain useful even when the app is not in the foreground.
 
 **Requirements:** FR2, FR3, NFR1–NFR6, UX-DR3–UX-DR5, UX-DR9–UX-DR11, UX-DR13.
 
+**Dependencies:** Story 1.2 establishes the session coordinator, canonical persisted record, and launch-recovery foundation used by this story.
+
 **Acceptance Criteria:**
 
 **Given** a running phase reaches its deadline while the app is in the background
@@ -268,7 +268,7 @@ So that reminders remain useful even when the app is not in the foreground.
 
 **Given** a valid session deadline is scheduled
 **When** the app is not foregrounded
-**Then** phase timing continues without phone interaction, subject to the target-device capability gate in Story 1.1.
+**Then** phase timing continues without phone interaction, subject to pre-release physical-device acceptance in Story 1.8.
 
 **Given** the session view is open during a running phase
 **When** time passes without a lifecycle transition
@@ -439,3 +439,63 @@ So that I can stay in the current phase when I need more time.
 **Given** a callback for the superseded phase deadline arrives after an extension
 **When** the coordinator validates its lifecycle, generation, and Wakeup ID
 **Then** it ignores the stale callback without advancing the phase or requesting a haptic.
+
+### Story 1.8: Verify the finished app on Pebble Time 2 before release
+
+As the watch owner,
+I want to verify the completed app's reminder behavior and interface on my Pebble Time 2,
+So that release is based on actual target-device acceptance rather than emulator or toolchain evidence alone.
+
+**Requirements:** FR1–FR8, NFR1–NFR6, NFR8–NFR9, UX-DR1–UX-DR13.
+
+**Dependencies:** Stories 1.2–1.7 are complete; Story 1.1's pre-implementation toolchain readiness is complete. Story 1.8 is the final Epic 1 story and a pre-release gate.
+
+**Acceptance Criteria:**
+
+**Given** the finished app and target Pebble Time 2
+**When** physical-device acceptance begins
+**Then** exact device model, firmware/OS, build artifact, and CLI/SDK toolchain identifiers are recorded; the finished app is installed on the target using the pinned workflow; and the exact physical install command and outcome are recorded.
+
+**Given** a session is started at a valid UTC time and the watch remains in normal use through one complete cycle
+**When** Sit, Stand, and Move each reach their deadline
+**Then** observe the complete 45/10/5 cycle on the target and record each resulting phase, remaining time, requested/observed haptic, app open/foreground behavior, and timing.
+
+**Given** an active session with a phase Wakeup scheduled
+**When** an ordinary phase deadline occurs
+**Then** leave the app normally so it is no longer foregrounded without force-terminating it, then separately record Wakeup/callback occurrence, requested and observed haptic, app open/foreground behavior, active phase and remaining time, and measured timing against a product-owner-agreed tolerance and repeat count.
+
+**Given** a timed pause is selected for 5, 10, or 30 minutes
+**When** the app is left normally so it is no longer foregrounded without force-terminating it until pause end
+**Then** record that each pause-end Wakeup resumes the same phase with saved remaining duration, does not advance the cycle, requests at most one haptic, opens/foregrounds the app, and meets the agreed timing tolerance.
+
+**Given** a user resumes before timed-pause end
+**When** the pause Wakeup is cancelled and any stale callback is delivered
+**Then** verify the same phase resumes with saved remaining time and the stale callback neither requests a haptic nor reopens the app; also verify overdue pause-end recovery resumes once without cycle advancement.
+
+**Given** session controls and phase deadlines are exercised on device
+**When** Skip, manual Pause/Resume, Stop, Extend, competing command/deadline, phase Pause/Stop cancellation, and extension rescheduling are tested
+**Then** verify the expected phase, Wakeup, stale-callback, and haptic behavior, including silent Start/Pause/Resume/Stop/Extend and one requested Skip/automatic-transition haptic.
+
+**Given** a phase deadline is overdue or UTC is invalid or adjusted
+**When** recovery and clock cases are exercised
+**Then** verify ordered overdue phase reconciliation and full-duration rebase, inactive Start with visible error for invalid UTC, preserved active state with scheduling/haptics suppressed until UTC is valid, forward corrections making reached deadlines due, and backward corrections deferring them.
+
+**Given** Wakeups are scheduled and the app is used repeatedly
+**When** operational limits and sustained use are tested
+**Then** verify no more than eight scheduled Wakeups, at least one-minute spacing, `notify_if_missed = false`, and record observed reliability and battery behavior.
+
+**Given** reliability and battery observations have been recorded
+**When** the project owner reviews the results against the intended personal-use pattern
+**Then** record whether the observed behavior is acceptable for release; any unacceptable or inconclusive result keeps Story 1.8 open pending further testing or a product decision.
+
+**Given** the finished app's session view and controls are used on Pebble Time 2
+**When** the display and hardware controls are checked
+**Then** verify countdown, phase identity, PAUSED/BREAK state, tally, button labels/behavior, native layout, and error text fit and remain legible without relying on color.
+
+**Given** implementation stories have tested persistence, scheduling, cancellation, and launch-recovery failures and crash boundaries
+**When** those implementation-test results are reviewed as part of Story 1.8 acceptance
+**Then** record the evidence that committed lifecycle/phase state, Wakeup identity/generation and callback acceptance, candidate cleanup/retry behavior, visible errors, and at-most-once haptic requests follow architecture contracts; physical acceptance itself does not require injecting internal failures into the watch.
+
+**Given** any required physical acceptance check fails or remains unverified
+**When** results are reported
+**Then** record the limitation and evidence, keep Story 1.8 open, and block release until the product owner resolves the affected scope or acceptance; do not claim physical acceptance passed.

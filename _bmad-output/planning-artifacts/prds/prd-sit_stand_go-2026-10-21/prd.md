@@ -2,14 +2,14 @@
 title: Sit Stand Go — Pebble Reminder App
 status: final
 created: 2026-10-21
-updated: 2026-10-23
+updated: 2026-10-31
 ---
 
 # PRD: Sit Stand Go
 
 ## 0. Document Purpose
 
-This PRD defines the first version of Sit Stand Go, a personal Pebble Time 2 watch app. It guides UX, architecture, and implementation planning, building on `_bmad-output/planning-artifacts/briefs/brief-sit_stand_go-2026-10-21/brief.md`. **Build readiness:** before implementation, verify the target firmware/toolchain, Wakeup behavior after leaving the app, haptic delivery, and app foregrounding on the physical watch.
+This PRD defines the first version of Sit Stand Go, a personal Pebble Time 2 watch app. It guides UX, architecture, and implementation planning, building on `_bmad-output/planning-artifacts/briefs/brief-sit_stand_go-2026-10-21/brief.md`. **Build readiness:** before implementation, pin the exact toolchain and demonstrate reproducible build/install readiness with the available workflow and emulator. Verify the finished app's physical Pebble Time 2 behavior as the pre-release gate in Story 1.8, after Stories 1.2–1.7.
 
 ## 1. Vision
 
@@ -97,7 +97,7 @@ The user can suspend the active Phase for 5, 10, or 30 minutes. The phase deadli
 - If the user manually resumes before pause end, the pause-end Wakeup is cancelled; any already delivered stale callback is ignored without haptic or UI reopen.
 - If the timed-pause wakeup is overdue on recovery, process it once, resume the preserved Phase, and emit at most one haptic.
 
-**Platform gate:** Timed-pause Wakeup must pass the Pebble Time 2 physical-device acceptance test in §5.1.
+**Platform gate:** Timed-pause Wakeup must pass the finished-app Pebble Time 2 physical-device acceptance test in §5.1 and Story 1.8 before release.
 
 If the user resumes manually before pause end, cancel the pause-end Wakeup; any already delivered stale callback must request neither a haptic nor an app reopen.
 
@@ -129,13 +129,14 @@ The user can extend the active Phase by +5 minutes or +10 minutes. The selected 
 - The target device is Pebble Time 2.
 - Phase timing must continue after the user leaves the app so it is no longer in the foreground, without phone interaction during a Session. Continued operation after explicit app termination is not required.
 - Rebble's developer site documents SDK 4 and includes guides for background workers and wakeups ([SDK 4](https://developer.rebble.io/sdk4), [Developer Guides](https://developer.rebble.io/guides/)). These general SDK references do not establish which mechanisms are supported by the Pebble Time 2 firmware or guarantee the required phase-notification behavior.
-- **Architecture acceptance criterion:** record firmware/OS and exact CLI/SDK versions; verify phase-deadline and timed-pause-end Wakeups after leaving the app separately. Each must emit the required haptic and foreground/open the app UI before implementation begins. If timed-pause Wakeup is unsupported, revisit the timed-pause feature with the user.
-- **[OPEN]** Pebble Time 2 firmware/OS version and whether Wakeup can both emit a haptic and foreground the app UI after the user leaves it; operation after explicit app termination is not required.
+- **Pre-implementation readiness:** pin the exact CLI, Python, and C SDK package/version and demonstrate a reproducible build/install using the available workflow; record available emulator results separately. Emulator results do not establish physical-device behavior.
+- **Pre-release acceptance:** Story 1.8 verifies the finished app on Pebble Time 2, including phase-deadline and timed-pause-end Wakeups after leaving the app, haptic and app foreground behavior, timing, operational limits, reliability, and finished-UI acceptance. If a required capability is unsupported, revisit the affected feature with the user before release.
+- **[OPEN]** Pebble Time 2 firmware/OS version and whether Wakeup can both emit a haptic and foreground the finished app after the user leaves it; operation after explicit app termination is not required. Resolve through Story 1.8 before release.
 
 ### 5.2 Timing and reliability
 
 - Phase transitions use UTC epoch wall time even when the device clock is manually/system adjusted: a forward correction that reaches a deadline makes it due; a backward correction delays it. Invalid UTC at Start leaves the Session inactive with a visible clock-time error. If UTC becomes invalid during a running Session, preserve state and suppress scheduling/haptics until valid time returns, then reconcile the deadline.
-- Before implementation, define measurable phase-transition tolerance on verified Pebble Time 2 firmware and test deadline/control races using `now >= deadline`.
+- Before physical acceptance, agree a measurable phase-transition tolerance and verify it on Pebble Time 2 using the finished app; test deadline/control races using `now >= deadline`.
 
 ## 6. Non-Goals
 
@@ -153,7 +154,7 @@ The user can extend the active Phase by +5 minutes or +10 minutes. The selected 
 - Repeating 45-minute Sit, 10-minute Stand, and 5-minute Move Cycle.
 - On-time phase deadlines emit haptics and open the app UI to show the new Phase and remaining time.
 - Manual pause/resume; timed pause for 5, 10, or 30 minutes; skip; and +5/+10-minute Phase extension.
-- Background reminders, subject to the architecture acceptance criterion in §5.1.
+- Background reminders, subject to the pre-release physical-device acceptance gate in §5.1 and Story 1.8.
 
 ### 7.2 Out of Scope for MVP
 
@@ -164,7 +165,7 @@ The user can extend the active Phase by +5 minutes or +10 minutes. The selected 
 
 ## 8. Success Metrics
 
-- **SM-1:** After target-platform feasibility is verified, the owner can observe a full 45/10/5 Cycle, the app requests haptics for automatic phase deadlines, timed-pause end, and Skip, and shows the active/resumed Phase and remaining time when opened on Pebble Time 2. Validates FR-1–FR-7.
+- **SM-1:** After Story 1.8 pre-release acceptance, the owner can observe a full 45/10/5 Cycle, the app requests haptics for automatic phase deadlines, timed-pause end, and Skip, and shows the active/resumed Phase and remaining time when opened on Pebble Time 2. Validates FR-1–FR-8.
 - **SM-2:** The owner can manually pause/resume, choose a 5/10/30-minute timed pause, skip, and extend without losing the active Session. Skip requests one haptic; timed-pause end requests at most one without advancing; Extend is silent. Early manual resume makes stale pause-end callbacks silent and prevents app reopen. Validates FR-4–FR-7.
 - **SM-C1 (counter-metric):** Avoid repeated or stale haptics after a Session is stopped or paused; reminder volume should not increase at the expense of control. Counterbalances SM-1.
 
@@ -175,8 +176,8 @@ For this personal tool, success is judged through direct use and timing checks r
 
 ## 9. Open Questions
 
-1. Which Pebble Time 2 firmware/OS and CLI/SDK versions are the support target, and does Wakeup after leaving the app emit a haptic and foreground the UI? **Owner: architecture; physical-device gate before implementation.**
-2. What measurable phase-transition tolerance is acceptable on the verified Pebble Time 2 firmware? **Owner: architecture; resolve during target testing.**
+1. Which Pebble Time 2 firmware/OS is the support target, and does Wakeup after leaving the finished app emit a haptic and foreground the UI? **Owner: project owner; resolve at the Story 1.8 pre-release gate.**
+2. What measurable phase-transition tolerance is acceptable on Pebble Time 2? **Owner: project owner; agree before Story 1.8 timing acceptance.**
 3. A separate Pebble system missed-wakeup alert is disabled in v1; revisit only if target testing shows user value. **Owner: product; reconsider after device testing.**
 
 ## 10. Assumptions Index

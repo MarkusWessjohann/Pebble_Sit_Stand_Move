@@ -4,17 +4,18 @@
 
 ## Goal
 
-Deliver a watch-first Pebble Time 2 app that lets its owner run a repeating Sit/Stand/Move reminder session and control it entirely from the watch. Phase timing and recovery must be reliable when the app is not foregrounded, while device-dependent Wakeup, haptic, app foregrounding, timing tolerance, and reproducible toolchain behavior remain subject to physical-device verification.
+Deliver a watch-first Pebble Time 2 app that lets its owner run a repeating Sit/Stand/Move reminder session and control it entirely from the watch. Story 1.1 establishes exact pinned toolchain and reproducible build/install readiness, plus available emulator evidence, before implementation. The finished app's device-dependent Wakeup, haptic, app foregrounding, timing tolerance, operational limits, reliability, and UI acceptance are verified on physical hardware in Story 1.8 before release.
 
 ## Stories
 
-- Story 1.1: Verify Pebble Time 2 reminder capabilities
+- Story 1.1: Establish Pebble toolchain and emulator readiness
 - Story 1.2: Start and stop a session from the watch
 - Story 1.3: Follow the cycle and recover from missed deadlines
 - Story 1.4: Manually pause and resume a session
 - Story 1.5: Take and end a timed pause
 - Story 1.6: Skip the active phase
 - Story 1.7: Extend the active phase
+- Story 1.8: Verify the finished app on Pebble Time 2 before release
 
 ## Requirements & Constraints
 
@@ -25,7 +26,8 @@ Deliver a watch-first Pebble Time 2 app that lets its owner run a repeating Sit/
 - Persisted session state and Wakeup identity must be recoverable and stale callbacks rejected. On clock invalidity, Start remains inactive with a visible error; an active session preserves committed state and suppresses scheduling/haptics until valid UTC returns and reconciliation occurs. Persistence or scheduling failures must retain committed state, be visible, and never imply an uncommitted mutation is active or reliably scheduled.
 - Provide only the session view and native watch menu. No sensing, health claims, analytics/history, schedules, cloud/social services, required phone companion, or configurable default phase lengths.
 - The session view textually identifies phase/lifecycle, remaining time, current watch time, daily naturally completed phase totals, and errors. Use native Pebble presentation; color/icons are supplementary. Daily totals aggregate across sessions for the local calendar day, persist through app restarts, exclude skipped/in-progress phases, and reset at local midnight.
-- Before implementation readiness, record exact device firmware/OS and pinned CLI/SDK versions; reproduce build and install; test Wakeups after leaving the app, haptic and app foregrounding, normal/overdue behavior, timing tolerance, Wakeup limits, and battery/reliability on target hardware.
+- Before implementation, Story 1.1 pins exact CLI, Python, and C SDK package/version and records reproducible build/install evidence using the available workflow, with emulator observations kept distinct from physical-device evidence.
+- Before release, Story 1.8 records exact device firmware/OS and build/toolchain identifiers and tests finished-app Wakeups after leaving the app, haptic and app foregrounding, normal/overdue behavior, timing tolerance, Wakeup limits, battery/reliability, and finished UI/controls on target hardware.
 
 ## Technical Decisions
 
@@ -43,6 +45,6 @@ Deliver a watch-first Pebble Time 2 app that lets its owner run a repeating Sit/
 
 ## Cross-Story Dependencies
 
-- Story 1.1 is the platform/toolchain feasibility gate before dependent reminder implementation. If Wakeup, haptic, foreground, or timing requirements cannot be verified, document the limitation and keep dependent behavior gated for a product decision.
+- Story 1.1 is the pre-implementation toolchain/readiness gate; it does not establish physical-device capability. Stories 1.2–1.7 depend on its completion and then implement the finished app. Story 1.8 depends on Stories 1.2–1.7 and is the final Epic 1, pre-release physical-device acceptance gate. If a required physical capability cannot be verified or fails, document the limitation and block release pending a product-owner decision.
 - Story 1.2 establishes the coordinator, canonical session record, lifecycle, view, and launch-repair foundation used by subsequent phase and pause stories.
 - Story 1.3 supplies phase progression, overdue recovery, and natural-completion tally behavior; Stories 1.4–1.7 add lifecycle controls and must reconcile due deadlines through the same coordinator before applying commands.

@@ -3,13 +3,13 @@
 **Date:** 2026-10-31
 **Project:** sit_stand_go
 **Trigger:** Story 1.1, Verify Pebble Time 2 reminder capabilities
-**Status:** Partially approved; implementation halted pending Story 1.1 intent resolution
+**Status:** Approved and applied by the project owner on 2026-10-31
 
 ## 1. Issue Summary
 
-The current plan makes physical Pebble Time 2 acceptance a prerequisite to starting implementation. The owner clarified that physical-watch testing will happen once the app is complete. This creates a sequencing mismatch: the device-specific acceptance requires the completed app, while the PRD, Architecture Spine, Epic 1, Story 1.1, and Epic context currently gate implementation on that acceptance.
+The current plan made physical Pebble Time 2 acceptance a prerequisite to starting implementation. The owner clarified that physical-watch testing will happen once the app is complete, and on 2026-10-31 explicitly authorized renegotiating Story 1.1's frozen intent and closing it only when its revised acceptance evidence is complete. The device-specific acceptance requires the completed app, so it now follows Stories 1.2–1.7 as Story 1.8 and gates release.
 
-Evidence: PRD §0 and §5.1, Architecture AD-3 and Deferred items, Epic NFR3/NFR9 and Story 1.1, and `epic-1-context.md` explicitly place physical-device verification before implementation. The current platform report records an owner-reported successful locked-CLI emulator build/install and Wakeup test, but exact SDK selection and detailed test observations remain incomplete; physical-device results do not yet exist.
+Evidence: PRD §0 and §5.1, Architecture AD-3 and Deferred items, Epic NFR3/NFR9 and Story 1.1, and `epic-1-context.md` explicitly placed physical-device verification before implementation. The platform report records owner-reported locked-CLI build/install and emulator Wakeup results, but exact C SDK package selection and complete reproducible build/install evidence remain incomplete; physical-device results do not yet exist.
 
 ## 2. Impact Analysis
 
@@ -49,7 +49,7 @@ No feature is removed and the MVP goal is unchanged. Implementation will tempora
 
 ## 4. Detailed Change Proposals
 
-The user approved these proposal directions incrementally on 2026-10-31; approval of this complete proposal and implementation is still pending.
+The project owner explicitly approved this proposal and renegotiated Story 1.1's frozen intent on 2026-10-31. The proposal is applied in the artifacts listed here.
 
 ### PRD
 
@@ -118,7 +118,7 @@ The user approved these proposal directions incrementally on 2026-10-31; approva
 **Responsibilities:**
 
 - **Product owner:** Approve this complete proposal; choose the measurable timing tolerance and repeat count before timing acceptance; decide scope changes if target capabilities fail.
-- **Developer:** After approval, update planning artifacts and tracking consistently, regenerate Epic 1 context, then implement Stories 1.1–1.7 in order. Add Story 1.8 for the owner-led finished-app physical acceptance.
+- **Developer:** Update planning artifacts and tracking consistently; complete Story 1.1 only after its revised toolchain/readiness acceptance evidence is complete; then implement Stories 1.2–1.7. Perform Story 1.8 finished-app physical acceptance before release.
 - **Architect/PM:** Revisit the design or product scope only if exact build feasibility fails or Story 1.8 exposes unsupported required behavior.
 
 **Success criteria:**
@@ -132,6 +132,6 @@ The user approved these proposal directions incrementally on 2026-10-31; approva
 
 - Incremental approval of proposal directions: recorded above.
 - Approval of the general sequencing direction: **Approved by the project owner on 2026-10-31**.
-- Subsequent decision: **Keep the existing Story 1.1 pre-implementation physical-device gate.**
-- Approval of this proposal as written: **Superseded / not approved for implementation**, because it changes the frozen Story 1.1 intent without renegotiation.
-- Implementation authorization: **Halted** until the owner explicitly renegotiates Story 1.1 intent or performs its current acceptance criteria.
+- Latest explicit authorization: **On 2026-10-31, the project owner authorized renegotiating Story 1.1's frozen intent: limit it to pre-implementation toolchain/build/emulator readiness, move physical Pebble Time 2 acceptance with the finished app to the end of Epic 1 after Stories 1.2–1.7 as a pre-release gate, preserve all physical acceptance checks in Story 1.8, and close Story 1.1 only when its revised acceptance evidence is complete.**
+- Proposal status: **Approved and applied.**
+- Tracking outcome: **Story 1.1 remains in progress**, not done, because its exact C SDK package/version and reproducible build/install evidence are incomplete. Story 1.8 is backlog and is the pre-release gate.

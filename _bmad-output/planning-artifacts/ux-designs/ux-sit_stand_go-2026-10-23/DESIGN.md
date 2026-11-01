@@ -4,7 +4,7 @@ name: Sit Stand Go
 description: Native Pebble Time 2 interface for a personal sit/stand/move reminder.
 status: final
 created: 2026-10-23
-updated: 2026-10-23
+updated: 2026-10-31
 sources:
   - ../../briefs/brief-sit_stand_go-2026-10-21/brief.md
   - ../../prds/prd-sit_stand_go-2026-10-21/prd.md
@@ -45,6 +45,8 @@ Single Pebble Time 2 watch form factor. Use the native display-safe area and spa
 5. Small bottom-line day tally with completed `Sit`, `Stand`, and `Move` counts.
 
 The top, middle, and bottom physical buttons are the session's right-side controls. The watch menu contains session-level commands. Do not introduce additional surfaces beyond the session view and native watch menu without a confirmed need.
+
+Verify the finished app's layout, controls, legibility, and firmware-dependent behavior on Pebble Time 2 in Story 1.8 before release.
 
 ## Elevation & Depth
 

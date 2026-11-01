@@ -10,7 +10,7 @@ uv run --locked pebble install --emulator emery       # install on the emery emu
 uv run --locked pebble install --phone <ip>           # install to a paired phone
 ```
 
-The lockfile fixes the project's Python CLI dependency set to Pebble Tool 5.0.40 and its transitive Python dependencies; `.python-version` selects Python 3.13. Use `uv run --locked pebble ...` so builds and installs use that project environment instead of a separately installed global CLI (the failing global CLI traceback was running from Python 3.15). The Pebble C SDK is installed separately by the host Pebble SDK setup; see the [platform verification report](_bmad-output/implementation-artifacts/platform-verification.md) for recording the SDK selected by the build. The owner reports SDK 4.33.1, which still needs confirmation.
+The lockfile fixes the project's Python CLI dependency set to Pebble Tool 5.0.40 and its transitive Python dependencies; `.python-version` pins Python 3.13.5. Use `uv run --locked pebble ...` so builds and installs use that project environment instead of a separately installed global CLI (the failing global CLI traceback was running from Python 3.15). The Pebble C SDK is installed separately by the host Pebble SDK setup; see the [platform verification report](_bmad-output/implementation-artifacts/platform-verification.md) for recording the SDK selected by the build. Host build evidence and owner reports reference SDK/toolchain 4.33.1, but the project-selected package/version and its reproducibility with the locked CLI still need confirmation.
 
 ## Target platforms
 

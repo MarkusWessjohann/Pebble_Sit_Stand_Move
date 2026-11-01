@@ -2,7 +2,7 @@
 title: Sit Stand Go — Watch Experience
 status: final
 created: 2026-10-23
-updated: 2026-10-23
+updated: 2026-10-31
 sources:
   - ../../briefs/brief-sit_stand_go-2026-10-21/brief.md
   - ../../prds/prd-sit_stand_go-2026-10-21/prd.md
@@ -23,6 +23,8 @@ Single-surface, watch-first experience for Pebble Time 2. No phone interaction i
 | Native watch menu | Opened through Pebble menu navigation | When inactive, show Start. While active, show Pause/Resume, Skip, then Stop, with Pause or Resume selected according to lifecycle state. |
 
 There is one foreground session view and one native menu; no phone, settings, history, analytics, or additional product surface is in scope. The session view's ordered layout and control placement are in `DESIGN.md`.
+
+Verify finished-app controls, legibility, and firmware-dependent behavior on Pebble Time 2 in Story 1.8 before release.
 
 ## Voice and Tone
 
