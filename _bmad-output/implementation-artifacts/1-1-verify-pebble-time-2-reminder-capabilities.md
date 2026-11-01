@@ -41,7 +41,7 @@ context:
 
 - `_bmad-output/implementation-artifacts/platform-verification.md` -- records local checks, owner-reported CLI/build/install/emulator outcomes, evidence gaps, and the physical acceptance checklist.
 - `_bmad-output/implementation-artifacts/sprint-status.yaml` -- tracks Story 1.1 as in progress until its narrowed toolchain/readiness criteria are evidenced; this story does not pass physical acceptance.
-- `pyproject.toml`, `uv.lock`, and `.python-version` -- Pebble Tool 5.0.40 and Python 3.13.5 pins; SDK 4.33.1 is owner-confirmed active, but not pinned/verified by the project-locked configuration.
+- `pyproject.toml`, `uv.lock`, `.python-version`, `.pebble-sdk-version`, and `scripts/pebble.py` -- Pebble Tool 5.0.40, Python 3.13.5, and SDK 4.33.1 project pins; the wrapper checks active SDK selection before invoking the locked CLI.
 - `package.json` -- Pebble manifest with target `emery` and SDK API level 3; API level is not an exact C SDK package pin.
 - `src/c/sit_stand_move.c` -- current diagnostic harness, not the session implementation.
 
@@ -50,14 +50,15 @@ context:
 **Execution:**
 - [x] `_bmad-output/implementation-artifacts/platform-verification.md` -- distinguish locally observed environment/build/install attempts from owner-reported results, existing artifacts, and unresolved evidence.
 - [x] `.python-version` -- pin the project-selected Python patch version to locally verified 3.13.5.
-- [ ] Project toolchain configuration -- pin the owner-confirmed Pebble C SDK 4.33.1 alongside the CLI/Python pins and capture its selected version/path using the project-locked environment.
+- [x] `.pebble-sdk-version`, `scripts/pebble.py`, and `README.md` -- pin SDK 4.33.1 separately from the manifest API level and guard project build/install commands against a different active SDK.
+- [ ] Project toolchain verification -- capture the SDK selected/version/path from a clean build under the project-locked environment; the sandbox cannot run Pebble commands.
 - [ ] `_bmad-output/implementation-artifacts/platform-verification.md` -- capture complete command output and artifact identity for clean/repeated build and install runs using the pinned workflow.
 - [ ] `_bmad-output/implementation-artifacts/platform-verification.md` -- record separate emulator phase and timed-pause callback, haptic-request, app-open/foreground, and timing observations, identifying owner-reported versus locally verified evidence. The unsupplied callback/foreground/haptic/timing details and owner-report provenance are listed, but observations remain incomplete.
 - [x] Carry the physical Pebble Time 2 acceptance scope into the pre-release Story 1.8 handoff; no physical-device result is required or asserted by Story 1.1.
 - [x] `_bmad-output/implementation-artifacts/sprint-status.yaml` -- track Story 1.1 and Epic 1 as in progress while readiness evidence is actively being completed and incomplete.
 
 **Acceptance Criteria:**
-- [ ] Given the project-locked toolchain configuration, when CLI, Python, and C SDK versions are inspected, then exact CLI/Python pins and C SDK 4.33.1 selection are recorded, with the Pebble manifest API level distinguished from the SDK package.
+- [ ] Given the project-locked toolchain configuration, when CLI, Python, and C SDK versions are inspected in the host environment, then exact CLI/Python pins and active C SDK 4.33.1 are recorded, with `package.json` API level distinguished from the C SDK package and the wrapper blocking commands when another SDK is active.
 - [ ] Given the pinned toolchain and diagnostic app, when a clean build and install are run repeatedly using documented commands, then command output, exit outcomes, target/artifact identity, and successful reproducibility are recorded; any owner-reported outcome is labeled as such and is not presented as a locally verified run.
 - [ ] Given the diagnostic app is installed in the emulator and leaves the foreground, when phase and timed-pause Wakeups are tested separately, then available evidence records each Wakeup/callback result, haptic request (not inferred physical delivery), app open/foreground behavior, and observed timing; missing details and the evidence source are explicit. Owner-reported test success is recorded, but foreground state, callback/log details, haptic-request evidence, and timing were not supplied.
 - [x] Given physical-device acceptance requires the finished app, when Story 1.1 is handed off, then Pebble Time 2 capability, timing, operational-limit, reliability, and finished-UI checks are assigned to pre-release Story 1.8 after Stories 1.2–1.7, and no physical result is claimed here.
@@ -68,6 +69,8 @@ context:
 The repository has a diagnostic Pebble app harness targeting `emery`; `package.json` declares SDK API level 3, not an exact C SDK package. `pyproject.toml`/`uv.lock` pin Pebble Tool 5.0.40 and `.python-version` pins Python 3.13.5. The owner-supplied `pebble sdk list` output confirms SDK 4.33.1 is installed and active in the owner's environment, but the project does not pin it or establish that the locked CLI selects it. Existing artifacts include an `emery` ARM ELF and `.pbw`, and `build/config.log` records Waf 2.1.4 and host SDK/toolchain paths including 4.33.1; neither proves the current source builds reproducibly. The owner reports that a project-locked Tool 5.0.40 / Python 3.13 build and emulator install succeeded and that separate phase and timed-pause emulator Wakeup tests succeeded, but complete command output, repeated clean-build evidence, callback details, foreground behavior, haptic-request observations, and timing were not supplied. Locally, Python 3.13.5 and uv 0.12.3 are available; `pebble`, `pebble-tool`, and `pebble-emulator` are absent, so local `pebble --version`, `pebble build`, and `pebble install --emulator emery` fail before execution with `command not found`. `uv lock --check --offline` passes. These local checks and owner-reported results are distinguished in `platform-verification.md`. Physical acceptance is deferred to Story 1.8 with the finished app after Stories 1.2–1.7; no physical tests have been run. Timing tolerance and repeat count remain owner decisions for Story 1.8. The readiness criteria remain incomplete, so this story and Epic 1 are in progress, not done.
 
 2026-11-01 owner evidence update: the owner supplied output from `pebble sdk list` showing SDK `4.33.1 (active)`. This establishes the active installed SDK in the owner's CLI environment, but not a project SDK pin or the SDK selected by the project-locked CLI. The clean/repeated build/install evidence and detailed emulator observations remain outstanding.
+
+2026-11-01 implementation update: added `.pebble-sdk-version` with `4.33.1` and a `scripts/pebble.py` wrapper used by the README build/install commands. The wrapper checks `pebble sdk list` via the locked CLI and only runs a requested command when 4.33.1 is marked active. The owner reports clean, build, and install success; command transcripts, artifact identity, and selected SDK/toolchain path have not yet been captured in the evidence report.
 
 ## Spec Change Log
 
@@ -95,3 +98,7 @@ The repository has a diagnostic Pebble app harness targeting `emery`; `package.j
 **Environment checks run:** `python3 --version`, `uv --version`, `command -v pebble`, `command -v pebble-tool`, `command -v pebble-emulator`, `python3 -m pip show pebble-tool`, `uv lock --check --offline`, `uv run --locked pebble --version`, `pebble --version`, `pebble build`, `pebble install --emulator emery`, `file build/emery/* build/sit_stand_go.pbw build/sit_stand_walk.pbw`, and `sha256sum build/emery/pebble-app.elf build/sit_stand_go.pbw build/sit_stand_walk.pbw`. Existing artifacts, `build/config.log`, `.python-version`, `pyproject.toml`, `uv.lock`, `package.json`, and the diagnostic harness were inspected. Exact outcomes and provenance are recorded in `platform-verification.md`.
 
 **Owner-supplied SDK evidence:** `pebble sdk list` — `Installed SDKs: 4.33.1 (active)` (2026-11-01); confirms active SDK in the owner's environment, not project pin/locked selection.
+
+**Project SDK pin:** `.pebble-sdk-version` pins `4.33.1`. Use the README build/install commands through `scripts/pebble.py`; the wrapper blocks the command if SDK 4.33.1 is not active. Owner reports the clean/build/install workflow succeeds; exact outputs and artifact/toolchain identity remain to be recorded.
+
+**Owner-reported clean/build/install evidence:** The owner confirms clean, build, and install all work using the active SDK 4.33.1. Full command transcript, exit outputs, target/artifact identity, and selected SDK/toolchain path remain to be captured before reproducibility acceptance is complete.

@@ -5,12 +5,12 @@ A Pebble watchapp/watchface written in C using the Pebble SDK.
 ## Building & running
 
 ```sh
-uv run --locked pebble build                          # build using the project's locked CLI
-uv run --locked pebble install --emulator emery       # install on the emery emulator
-uv run --locked pebble install --phone <ip>           # install to a paired phone
+uv run --locked python scripts/pebble.py build                          # build using the pinned CLI and active SDK
+uv run --locked python scripts/pebble.py install --emulator emery       # install on the emery emulator
+uv run --locked python scripts/pebble.py install --phone <ip>           # install to a paired phone
 ```
 
-The lockfile fixes the project's Python CLI dependency set to Pebble Tool 5.0.40 and its transitive Python dependencies; `.python-version` pins Python 3.13.5. Use `uv run --locked pebble ...` so builds and installs use that project environment instead of a separately installed global CLI (the failing global CLI traceback was running from Python 3.15). The Pebble C SDK is installed separately by the host Pebble SDK setup; see the [platform verification report](_bmad-output/implementation-artifacts/platform-verification.md) for recording the SDK selected by the build. Host build evidence and owner reports reference SDK/toolchain 4.33.1, but the project-selected package/version and its reproducibility with the locked CLI still need confirmation.
+The lockfile fixes the project's Python CLI dependency set to Pebble Tool 5.0.40 and its transitive Python dependencies; `.python-version` pins Python 3.13.5. `.pebble-sdk-version` pins the active host C SDK to 4.33.1. The wrapper checks `pebble sdk list` and refuses to build/install unless the project-pinned SDK is active, then runs the command through the locked CLI. The C SDK is installed separately by the host Pebble SDK manager; activate the pinned version there before using these commands. In `package.json`, `sdkVersion: "3"` remains the manifest API level, not the C SDK package version.
 
 ## Target platforms
 
