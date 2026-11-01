@@ -38,7 +38,7 @@ story_location: _bmad-output/implementation-artifacts
 
 development_status:
   epic-1: in-progress
-  1-1-verify-pebble-time-2-reminder-capabilities: in-progress
+  1-1-establish-pebble-toolchain-and-emulator-readiness: in-progress
   1-2-start-and-stop-a-session-from-the-watch: review
   1-3-follow-the-cycle-and-recover-from-missed-deadlines: review
   1-4-manually-pause-and-resume-a-session: backlog
