@@ -5,6 +5,7 @@ A Pebble watchapp/watchface written in C using the Pebble SDK.
 ## Building & running
 
 ```sh
+uv run --locked python scripts/pebble.py clean                          # remove build output
 uv run --locked python scripts/pebble.py build                          # build using the pinned CLI and active SDK
 uv run --locked python scripts/pebble.py install --emulator emery       # install on the emery emulator
 uv run --locked python scripts/pebble.py install --phone <ip>           # install to a paired phone

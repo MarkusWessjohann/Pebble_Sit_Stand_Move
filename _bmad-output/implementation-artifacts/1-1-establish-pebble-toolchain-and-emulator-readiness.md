@@ -10,6 +10,8 @@ context:
   - _bmad-output/implementation-artifacts/epic-1-context.md
 ---
 
+**Current status (2026-11-01):** 2 of 5 acceptance criteria are met; AC1 to AC3 are open. Missing evidence: raw `pebble sdk list` output, the SDK path the locked CLI selects, transcripts and artifact identity for clean and repeated build/install runs, and the emulator Wakeup observations (callback, haptic request, foreground, timing, emulator version). The owner reports these as working but has not supplied them. Physical Pebble Time 2 acceptance belongs to Story 1.8. Open owner decisions are listed under Implementation Notes.
+
 <frozen-after-approval reason="human-owned intent — renegotiated by the project owner on 2026-10-31">
 
 ## Intent
@@ -39,11 +41,13 @@ context:
 
 ## Code Map
 
-- `_bmad-output/implementation-artifacts/platform-verification.md` -- records local checks, owner-reported CLI/build/install/emulator outcomes, evidence gaps, and the physical acceptance checklist.
-- `_bmad-output/implementation-artifacts/sprint-status.yaml` -- tracks Story 1.1 as in progress until its narrowed toolchain/readiness criteria are evidenced; this story does not pass physical acceptance.
-- `pyproject.toml`, `uv.lock`, `.python-version`, `.pebble-sdk-version`, and `scripts/pebble.py` -- Pebble Tool 5.0.40, Python 3.13.5, and SDK 4.33.1 project pins; the wrapper checks active SDK selection before invoking the locked CLI.
-- `package.json` -- Pebble manifest with target `emery` and SDK API level 3; API level is not an exact C SDK package pin.
-- `src/c/sit_stand_move.c` -- current diagnostic harness, not the session implementation.
+- `_bmad-output/implementation-artifacts/platform-verification.md` -- local checks, owner-reported outcomes, evidence gaps, and the Story 1.8 handoff.
+- `_bmad-output/implementation-artifacts/sprint-status.yaml` -- tracks Story 1.1 and Epic 1 status.
+- `pyproject.toml`, `uv.lock`, `.python-version`, `.pebble-sdk-version` -- pins: Pebble Tool 5.0.40, Python 3.13.5, SDK 4.33.1. `pyproject.toml` only requires Python `>=3.13`; `.python-version` fixes the patch version.
+- `scripts/pebble.py`, `tests/test_pebble_wrapper.py` -- wrapper that blocks build/install unless the pinned SDK is active, with three stubbed unit tests. The tests have not run against real `pebble sdk list` output.
+- `README.md` -- documents the wrapper commands for build and install, and the `clean` command added for AC2.
+- `package.json` -- manifest with SDK API level 3, which is not a C SDK package pin. It lists seven target platforms (aplite, basalt, chalk, diorite, emery, flint, gabbro), not only `emery`.
+- `src/c/sit_stand_move.c` -- the session app (Stories 1.2 and 1.3). The Wakeup diagnostic harness was added in `818abf5` and replaced in `be85b56`; its last revision is `ef33c2f`.
 
 ## Tasks & Acceptance
 
@@ -51,54 +55,74 @@ context:
 - [x] `_bmad-output/implementation-artifacts/platform-verification.md` -- distinguish locally observed environment/build/install attempts from owner-reported results, existing artifacts, and unresolved evidence.
 - [x] `.python-version` -- pin the project-selected Python patch version to locally verified 3.13.5.
 - [x] `.pebble-sdk-version`, `scripts/pebble.py`, and `README.md` -- pin SDK 4.33.1 separately from the manifest API level and guard project build/install commands against a different active SDK.
-- [ ] Project toolchain verification -- capture the SDK selected/version/path from a clean build under the project-locked environment; the sandbox cannot run Pebble commands.
-- [ ] `_bmad-output/implementation-artifacts/platform-verification.md` -- capture complete command output and artifact identity for clean/repeated build and install runs using the pinned workflow.
-- [ ] `_bmad-output/implementation-artifacts/platform-verification.md` -- record separate emulator phase and timed-pause callback, haptic-request, app-open/foreground, and timing observations, identifying owner-reported versus locally verified evidence. The unsupplied callback/foreground/haptic/timing details and owner-report provenance are listed, but observations remain incomplete.
+- [ ] Project toolchain verification (AC1) -- capture the selected SDK version and path from a clean build under the project-locked environment; the sandbox cannot run Pebble commands.
+- [ ] `_bmad-output/implementation-artifacts/platform-verification.md` (AC2) -- capture complete command output and artifact identity for clean and repeated build and install runs using the pinned workflow.
+- [ ] `_bmad-output/implementation-artifacts/platform-verification.md` (AC3) -- record separate emulator phase and timed-pause callback, haptic-request, app-open/foreground, and timing observations, identifying owner-reported versus locally verified evidence.
 - [x] Carry the physical Pebble Time 2 acceptance scope into the pre-release Story 1.8 handoff; no physical-device result is required or asserted by Story 1.1.
-- [x] `_bmad-output/implementation-artifacts/sprint-status.yaml` -- track Story 1.1 and Epic 1 as in progress while readiness evidence is actively being completed and incomplete.
+- [x] `_bmad-output/implementation-artifacts/sprint-status.yaml` -- track Story 1.1 and Epic 1 as in progress while readiness evidence is incomplete.
 
 **Acceptance Criteria:**
-- [ ] Given the project-locked toolchain configuration, when CLI, Python, and C SDK versions are inspected in the host environment, then exact CLI/Python pins and active C SDK 4.33.1 are recorded, with `package.json` API level distinguished from the C SDK package and the wrapper blocking commands when another SDK is active.
-- [ ] Given the pinned toolchain and diagnostic app, when a clean build and install are run repeatedly using documented commands, then command output, exit outcomes, target/artifact identity, and successful reproducibility are recorded; any owner-reported outcome is labeled as such and is not presented as a locally verified run.
-- [ ] Given the diagnostic app is installed in the emulator and leaves the foreground, when phase and timed-pause Wakeups are tested separately, then available evidence records each Wakeup/callback result, haptic request (not inferred physical delivery), app open/foreground behavior, and observed timing; missing details and the evidence source are explicit. Owner-reported test success is recorded, but foreground state, callback/log details, haptic-request evidence, and timing were not supplied.
-- [x] Given physical-device acceptance requires the finished app, when Story 1.1 is handed off, then Pebble Time 2 capability, timing, operational-limit, reliability, and finished-UI checks are assigned to pre-release Story 1.8 after Stories 1.2–1.7, and no physical result is claimed here.
-- [x] Given any readiness evidence remains incomplete, when Story 1.1 status is updated, then the missing evidence is stated and the story remains open; it is not marked done.
+- [ ] AC1: Given the project-locked toolchain configuration, when CLI, Python, and C SDK versions are inspected in the host environment, then exact CLI/Python pins and active C SDK 4.33.1 are recorded, with `package.json` API level distinguished from the C SDK package and the wrapper blocking commands when another SDK is active.
+- [ ] AC2: Given the pinned toolchain and the app at a recorded commit, when a clean build and install are run repeatedly using documented commands, then command output, exit outcomes, target/artifact identity, and successful reproducibility are recorded; any owner-reported outcome is labeled as such and is not presented as a locally verified run.
+- [ ] AC3: Given the emulator app build leaves the foreground, when phase and timed-pause Wakeups are tested separately, then available evidence records each Wakeup/callback result, haptic request (not inferred physical delivery), app open/foreground behavior, and observed timing; missing details and the evidence source are explicit.
+- [x] AC4: Given physical-device acceptance requires the finished app, when Story 1.1 is handed off, then Pebble Time 2 capability, timing, operational-limit, reliability, and finished-UI checks are assigned to pre-release Story 1.8 after Stories 1.2–1.7, and no physical result is claimed here.
+- [x] AC5: Given any readiness evidence remains incomplete, when Story 1.1 status is updated, then the missing evidence is stated and the story remains open; it is not marked done.
 
 ## Implementation Notes
 
-The repository has a diagnostic Pebble app harness targeting `emery`; `package.json` declares SDK API level 3, not an exact C SDK package. `pyproject.toml`/`uv.lock` pin Pebble Tool 5.0.40 and `.python-version` pins Python 3.13.5. The owner-supplied `pebble sdk list` output confirms SDK 4.33.1 is installed and active in the owner's environment, but the project does not pin it or establish that the locked CLI selects it. Existing artifacts include an `emery` ARM ELF and `.pbw`, and `build/config.log` records Waf 2.1.4 and host SDK/toolchain paths including 4.33.1; neither proves the current source builds reproducibly. The owner reports that a project-locked Tool 5.0.40 / Python 3.13 build and emulator install succeeded and that separate phase and timed-pause emulator Wakeup tests succeeded, but complete command output, repeated clean-build evidence, callback details, foreground behavior, haptic-request observations, and timing were not supplied. Locally, Python 3.13.5 and uv 0.12.3 are available; `pebble`, `pebble-tool`, and `pebble-emulator` are absent, so local `pebble --version`, `pebble build`, and `pebble install --emulator emery` fail before execution with `command not found`. `uv lock --check --offline` passes. These local checks and owner-reported results are distinguished in `platform-verification.md`. Physical acceptance is deferred to Story 1.8 with the finished app after Stories 1.2–1.7; no physical tests have been run. Timing tolerance and repeat count remain owner decisions for Story 1.8. The readiness criteria remain incomplete, so this story and Epic 1 are in progress, not done.
+**Evidence status.** Each fact carries its source: *local* (run in the sandbox), *owner* (reported, no transcript), or *file* (inspected in the repository).
 
-2026-11-01 owner evidence update: the owner supplied output from `pebble sdk list` showing SDK `4.33.1 (active)`. This establishes the active installed SDK in the owner's CLI environment, but not a project SDK pin or the SDK selected by the project-locked CLI. The clean/repeated build/install evidence and detailed emulator observations remain outstanding.
+- *Pins (file).* Pebble Tool 5.0.40 (`pyproject.toml`, `uv.lock`), Python 3.13.5 (`.python-version`), SDK 4.33.1 (`.pebble-sdk-version`, added 2026-11-01). `package.json` declares SDK API level 3, which is not a package pin. The owner's global Tool 5.1.2 failed `pebble install --emulator emery` (`KeyError: 'endpoint'` in `libpebble2`, run under Python 3.15). The owner reports the locked 5.0.40 / Python 3.13 combination works; the effect of each variable was not isolated, so the reason for the pin is not established.
+- *SDK (owner, 2026-11-01).* `pebble sdk list` printed `Installed SDKs: 4.33.1 (active)`. This confirms the active SDK in the owner's environment. It does not confirm the SDK the locked CLI selects. The raw multi-line output was not captured.
+- *Wrapper (file, 2026-11-01).* `scripts/pebble.py` runs `pebble sdk list` through the locked CLI and runs the requested command only if a line equals `4.33.1 (active)`. The three unit tests use stubbed output. The wrapper has not run against a real CLI in any recorded environment.
+- *Build and install (owner).* The owner reports that the clean, build, and install commands all succeeded with SDK 4.33.1 under the locked CLI. Transcripts, exit codes, artifact identity, and the selected SDK path were not supplied.
+- *Emulator Wakeup (owner).* The owner reports separate phase and timed-pause emulator tests succeeded. Callback logs, haptic-request evidence, foreground state, timing, and emulator version were not supplied. That harness no longer exists at HEAD (see Code Map), and which revision the owner tested is not recorded.
+- *Existing artifacts (file).* `build/emery/pebble-app.elf`, `build/sit_stand_go.pbw`, and `build/sit_stand_walk.pbw` exist, and `build/config.log` records Waf 2.1.4 and SDK paths including 4.33.1. None shows that the current source builds reproducibly. Hashes are in `platform-verification.md`.
+- *Sandbox (local, 2026-10-31).* `python3` is 3.13.5 and `uv` is 0.12.3. `pebble`, `pebble-tool`, and `pebble-emulator` are absent, so Pebble commands fail with `command not found`. `uv lock --check --offline` passes. `uv run --locked pebble --version` failed because uv could not download `greenlet==3.5.6` through the proxy. Full command outcomes are in `platform-verification.md`.
 
-2026-11-01 implementation update: added `.pebble-sdk-version` with `4.33.1` and a `scripts/pebble.py` wrapper used by the README build/install commands. The wrapper checks `pebble sdk list` via the locked CLI and only runs a requested command when 4.33.1 is marked active. The owner reports clean, build, and install success; command transcripts, artifact identity, and selected SDK/toolchain path have not yet been captured in the evidence report.
+**Open owner decisions.** No value is invented here for any of these.
+
+- Minimum number of clean build and install repeats that counts as "repeated".
+- Definition of artifact identity (for example platform, app UUID, version, and sha256) and how differing `.pbw` hashes between runs are treated.
+- Which revision the emulator Wakeup evidence applies to, given the harness was replaced.
+- Whether `targetPlatforms` should be limited to `emery`; a full build compiles all seven.
+- Closure rule: who runs the commands, and whether an item the owner cannot evidence blocks the story, is waived explicitly, or moves to Story 1.8.
+- Timing tolerance and repeat count for Story 1.8, to be fixed before its timing tests start.
+
+**Gate waiver.** Epics says Story 1.1 must be complete before implementation stories begin. The Story 1.2 spec records the owner's decision to proceed while 1.1 stays open, and Story 1.3 followed. The Epics dependency wording has not been updated to match.
 
 ## Spec Change Log
 
 - 2026-10-31 — Project owner explicitly renegotiated frozen intent: Story 1.1 now gates pre-implementation pinned toolchain/reproducible build readiness and available emulator evidence; finished-app Pebble Time 2 acceptance moves to pre-release Story 1.8 after Stories 1.2–1.7. No physical capability is claimed.
+- 2026-11-01 — Review follow-up (non-frozen sections only; the frozen block is unchanged). Renamed the story file and sprint key from `1-1-verify-pebble-time-2-reminder-capabilities` to `1-1-establish-pebble-toolchain-and-emulator-readiness`. Reworded AC2 from "diagnostic app" to "the app at a recorded commit", because the diagnostic harness no longer exists at HEAD. Recorded the owner's waiver that let Stories 1.2 and 1.3 proceed. AC numbers were added; criteria text is otherwise unchanged.
 
 ## Review Triage Log
 
-- medium — The evidence-report creation tasks were marked complete despite requiring target-specific facts and test outcomes absent from the report. Narrowed the task to accurately describe the created blocker/evidence report, and left actual build/device results unchecked. Evidence: the report states CLI/SDK pins, build/install, emulator, physical Wakeup, timing, and battery checks are unavailable or not run.
-- medium — Sprint tracking was advanced although the story explicitly requires retaining backlog/blocked when physical-device checks cannot be performed. Restored Story 1.1 and Epic 1 to backlog until the target acceptance evidence is available. Evidence: no target device is connected to this environment and no CLI/emulator is installed.
-- medium — Acceptance described clock and Wakeup-boundary checks without explicit expected outcomes. Added the already-specified clock policy and documented eight-Wakeup/one-minute limits to the acceptance wording and report checklist.
-- maybe-false — Acceptance does not set a numeric timing tolerance or number of repeats. Product owner agreement is needed before tests can yield a pass/fail result; no value is invented here.
-- deferred — The Code Map says the repository lacks app source and a Pebble manifest, but `src/c/sit_stand_move.c` and `package.json` exist. This inventory drift predates the report changes and was already recorded in `deferred-work.md`.
-- false — The suggested repeat-count acceptance addition edits this build's spec, which the review workflow excludes; the story already records that the owner must agree a sufficient repeat count before timing tests.
-- false — The suggested one-minute-window clarification is already established in architecture as a spacing/exclusion constraint between scheduled wakeups and is used consistently in the report.
-- false — The report asks to record boundary behavior and explicitly documents the eight-event maximum and one-minute spacing; the unrun target tests are clearly marked as blocked.
-- medium — The report distinguishes scheduled-deadline-to-Wakeup-callback delay from scheduled-deadline-to-app-open/foreground delay and records haptic request/delivery separately. Evidence: the prior wording did not distinguish callback timing from app presentation timing.
-- false — Adding test duration or reminder-cycle-count criteria would expand the frozen test intent; the report transparently leaves battery/reliability observations unmeasured pending physical-device testing.
-- false — The report explicitly labels firmware and CLI/SDK pins blocked and the platform gate not passed, so the missing version evidence is accurately disclosed rather than falsely claimed as complete.
-- Historical triage entries above describe the pre-renegotiation physical-device gate and are superseded where they conflict with the 2026-10-31 owner-approved scope change.
+### Earlier reviews (before the 2026-10-31 renegotiation)
+
+- Resolved or false: evidence-report tasks were narrowed to describe the report, clock and Wakeup-limit outcomes were added to the acceptance wording, callback timing was separated from app-presentation timing, and suggestions to add test duration, cycle counts, or a repeat count were rejected as expanding the frozen intent or as already covered.
+- Open: no numeric timing tolerance or repeat count exists. The owner must agree both before Story 1.8 timing tests; no value is invented here.
+- Entries that described the physical-device gate are superseded by the 2026-10-31 scope change.
+- Superseded 2026-11-01 — the entries restoring sprint tracking to backlog (status has been in-progress since the renegotiation) and deferring Code Map drift (Code Map corrected; `deferred-work.md` holds only the SDK-path entry) are removed from the history above.
+
+### Review 2026-11-01 (adversarial, edge-case, structure, prose)
+
+- medium — The emulator Wakeup evidence points to a harness that no longer exists at HEAD (`818abf5` to `ef33c2f`). Recorded in the Code Map and Evidence status; which revision was tested stays an owner decision.
+- medium — Status narrative sat inside Tasks and ACs, and the sprint and Code Map text contradicted the in-progress status. Moved the narrative into a status summary and Evidence status, and gave the ACs numbers.
+- medium — The Code Map said the manifest targets `emery`, but `package.json` lists seven platforms. Corrected; limiting platforms is an owner decision.
+- medium — Notes contradicted themselves on whether the SDK is pinned, and repeated facts three times. Merged into one Evidence status block with provenance labels.
+- low — Wording: "clean/build/install success", "SDK selected/version/path", and "actively being completed and incomplete". Reworded.
+- maybe-false — The guard's exact-line match may not fit real `pebble sdk list` output. It is most likely one SDK per line, which the guard handles. Settle by capturing the raw output (AC1).
+- false — "The wrapper has no test". `tests/test_pebble_wrapper.py` has three stubbed tests that pass; the gap is real CLI output, not a missing test.
+- false — "The story title is mismatched with the epic". Title now matches in substance; the slug was the mismatch and is renamed.
+- deferred to owner — Run count, artifact identity, closure rule, Story 1.8 tolerance, and platform scope (listed under Implementation Notes). They change the frozen intent or are product decisions.
 
 ## Verification
 
-**Manual checks (if no CLI):** Verify every result is identified as locally observed, owner-reported, or untested; confirm emulator evidence is not represented as physical-device acceptance and that physical tests are assigned to Story 1.8.
+**Commands (to run on a host with the Pebble CLI; the sandbox cannot):**
+- `uv run --locked pebble --version` and `uv run --locked pebble sdk list` -- record raw output.
+- `uv run --locked python scripts/pebble.py clean`, then `build`, with output and exit code captured. Record the SDK lines from `build/config.log` and `sha256sum build/*.pbw`. Repeat for the agreed run count.
+- `uv run --locked python scripts/pebble.py install --emulator emery`, then `uv run --locked pebble logs`, recording the emulator version.
+- `sh scripts/test.sh` -- host-side tests; they do not exercise the Pebble SDK.
 
-**Environment checks run:** `python3 --version`, `uv --version`, `command -v pebble`, `command -v pebble-tool`, `command -v pebble-emulator`, `python3 -m pip show pebble-tool`, `uv lock --check --offline`, `uv run --locked pebble --version`, `pebble --version`, `pebble build`, `pebble install --emulator emery`, `file build/emery/* build/sit_stand_go.pbw build/sit_stand_walk.pbw`, and `sha256sum build/emery/pebble-app.elf build/sit_stand_go.pbw build/sit_stand_walk.pbw`. Existing artifacts, `build/config.log`, `.python-version`, `pyproject.toml`, `uv.lock`, `package.json`, and the diagnostic harness were inspected. Exact outcomes and provenance are recorded in `platform-verification.md`.
-
-**Owner-supplied SDK evidence:** `pebble sdk list` — `Installed SDKs: 4.33.1 (active)` (2026-11-01); confirms active SDK in the owner's environment, not project pin/locked selection.
-
-**Project SDK pin:** `.pebble-sdk-version` pins `4.33.1`. Use the README build/install commands through `scripts/pebble.py`; the wrapper blocks the command if SDK 4.33.1 is not active. Owner reports the clean/build/install workflow succeeds; exact outputs and artifact/toolchain identity remain to be recorded.
-
-**Owner-reported clean/build/install evidence:** The owner confirms clean, build, and install all work using the active SDK 4.33.1. Full command transcript, exit outputs, target/artifact identity, and selected SDK/toolchain path remain to be captured before reproducibility acceptance is complete.
+**Manual checks:** Verify every result is labeled locally observed, owner-reported, or untested. Confirm emulator evidence is not presented as physical-device acceptance and that physical tests are assigned to Story 1.8. Haptic evidence from the emulator is a logged API call, not observed vibration.
