@@ -9,6 +9,7 @@ static TextLayer *s_time_layer;
 static TextLayer *s_countdown_layer;
 static Layer *s_icon_layer;
 static TextLayer *s_phase_layer;
+static TextLayer *s_controls_layer;
 static TextLayer *s_tally_layer;
 static TextLayer *s_error_layer;
 static Window *s_menu_window;
@@ -17,6 +18,7 @@ static AppTimer *s_refresh_timer;
 static char s_time_text[16];
 static char s_countdown_text[16];
 static char s_phase_text[16];
+static char s_controls_text[24];
 static char s_tally_text[48];
 static char s_error_text[32];
 
@@ -85,9 +87,18 @@ static void prv_render(void) {
   }
   text_layer_set_text(s_time_layer, s_time_text);
 
-  if (view.record.lifecycle == SESSION_RUNNING || view.record.lifecycle == SESSION_PAUSED) {
+  if (view.record.lifecycle == SESSION_TIMED_PAUSED) {
     snprintf(s_countdown_text, sizeof(s_countdown_text), "%02d:%02d",
              (int)(view.remaining_seconds / 60), (int)(view.remaining_seconds % 60));
+    snprintf(s_phase_text, sizeof(s_phase_text), "BREAK");
+    text_layer_set_font(s_phase_layer, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD));
+    int shorter = view.record.pause_duration_seconds == 5 * 60 ? 10 : 5;
+    int longer = view.record.pause_duration_seconds == 30 * 60 ? 10 : 30;
+    snprintf(s_controls_text, sizeof(s_controls_text), "TOP %dm BOTTOM %dm", shorter, longer);
+  } else if (view.record.lifecycle == SESSION_RUNNING || view.record.lifecycle == SESSION_PAUSED) {
+    snprintf(s_countdown_text, sizeof(s_countdown_text), "%02d:%02d",
+             (int)(view.remaining_seconds / 60), (int)(view.remaining_seconds % 60));
+    s_controls_text[0] = '\0';
     if (view.record.lifecycle == SESSION_PAUSED) {
       snprintf(s_phase_text, sizeof(s_phase_text), "PAUSED: %s", prv_phase_name(view.record.phase));
       text_layer_set_font(s_phase_layer, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD));
@@ -98,10 +109,12 @@ static void prv_render(void) {
   } else {
     snprintf(s_countdown_text, sizeof(s_countdown_text), "--:--");
     snprintf(s_phase_text, sizeof(s_phase_text), "Ready");
+    s_controls_text[0] = '\0';
     text_layer_set_font(s_phase_layer, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD));
   }
   text_layer_set_text(s_countdown_layer, s_countdown_text);
   text_layer_set_text(s_phase_layer, s_phase_text);
+  text_layer_set_text(s_controls_layer, s_controls_text);
   if (s_icon_layer) {
     layer_mark_dirty(s_icon_layer);
   }
@@ -136,7 +149,7 @@ static void prv_menu_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex 
   if (view.record.lifecycle == SESSION_INACTIVE) {
     title = "Start";
   } else if (cell_index->row == 0) {
-    title = view.record.lifecycle == SESSION_PAUSED ? "Resume" : "Pause";
+    title = view.record.lifecycle == SESSION_RUNNING ? "Pause" : "Resume";
   } else if (cell_index->row == 1) {
     title = "Skip";
   } else {
@@ -184,15 +197,44 @@ static void prv_menu_window_unload(Window *window) {
 }
 
 static void prv_select_click_handler(ClickRecognizerRef recognizer, void *context) {
-  if (session_coordinator_resume_if_paused()) {
+  if (session_coordinator_middle_control()) {
     app_timer_register(5, prv_render_cb, NULL);
     return;
   }
   window_stack_push(s_menu_window, true);
 }
 
+static void prv_up_click_handler(ClickRecognizerRef recognizer, void *context) {
+  (void)recognizer;
+  (void)context;
+  if (session_coordinator_top_control()) {
+    app_timer_register(5, prv_render_cb, NULL);
+  } else {
+    window_stack_push(s_menu_window, true);
+  }
+}
+
+static void prv_down_click_handler(ClickRecognizerRef recognizer, void *context) {
+  (void)recognizer;
+  (void)context;
+  if (session_coordinator_bottom_control()) {
+    app_timer_register(5, prv_render_cb, NULL);
+  } else {
+    window_stack_push(s_menu_window, true);
+  }
+}
+
+static void prv_menu_click_handler(ClickRecognizerRef recognizer, void *context) {
+  (void)recognizer;
+  (void)context;
+  window_stack_push(s_menu_window, true);
+}
+
 static void prv_click_config_provider(void *context) {
   window_single_click_subscribe(BUTTON_ID_SELECT, prv_select_click_handler);
+  window_single_click_subscribe(BUTTON_ID_UP, prv_up_click_handler);
+  window_single_click_subscribe(BUTTON_ID_DOWN, prv_down_click_handler);
+  window_long_click_subscribe(BUTTON_ID_SELECT, 500, prv_menu_click_handler, NULL);
 }
 
 static void prv_window_load(Window *window) {
@@ -214,12 +256,17 @@ static void prv_window_load(Window *window) {
   layer_set_update_proc(s_icon_layer, prv_draw_icon);
   layer_add_child(root, s_icon_layer);
 
-  s_phase_layer = text_layer_create(GRect(0, 100, bounds.size.w, 28));
+  s_phase_layer = text_layer_create(GRect(0, 99, bounds.size.w, 28));
   text_layer_set_font(s_phase_layer, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD));
   text_layer_set_text_alignment(s_phase_layer, GTextAlignmentCenter);
   layer_add_child(root, text_layer_get_layer(s_phase_layer));
 
-  s_tally_layer = text_layer_create(GRect(0, bounds.size.h - 38, bounds.size.w, 20));
+  s_controls_layer = text_layer_create(GRect(0, 127, bounds.size.w, 16));
+  text_layer_set_font(s_controls_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
+  text_layer_set_text_alignment(s_controls_layer, GTextAlignmentCenter);
+  layer_add_child(root, text_layer_get_layer(s_controls_layer));
+
+  s_tally_layer = text_layer_create(GRect(0, bounds.size.h - 32, bounds.size.w, 14));
   text_layer_set_font(s_tally_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
   text_layer_set_text_alignment(s_tally_layer, GTextAlignmentCenter);
   layer_add_child(root, text_layer_get_layer(s_tally_layer));
@@ -236,12 +283,14 @@ static void prv_window_unload(Window *window) {
   text_layer_destroy(s_countdown_layer);
   layer_destroy(s_icon_layer);
   text_layer_destroy(s_phase_layer);
+  text_layer_destroy(s_controls_layer);
   text_layer_destroy(s_tally_layer);
   text_layer_destroy(s_error_layer);
   s_time_layer = NULL;
   s_countdown_layer = NULL;
   s_icon_layer = NULL;
   s_phase_layer = NULL;
+  s_controls_layer = NULL;
   s_tally_layer = NULL;
   s_error_layer = NULL;
 }
