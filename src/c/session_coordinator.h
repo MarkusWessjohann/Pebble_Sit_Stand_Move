@@ -20,6 +20,9 @@ typedef struct {
 void session_coordinator_init(void);
 void session_coordinator_deinit(void);
 void session_coordinator_start(void);
+void session_coordinator_pause(void);
+void session_coordinator_resume(void);
+bool session_coordinator_resume_if_paused(void);
 void session_coordinator_stop(void);
 void session_coordinator_select_menu_row(uint16_t row);
 void session_coordinator_recover(void);

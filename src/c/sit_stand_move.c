@@ -85,13 +85,20 @@ static void prv_render(void) {
   }
   text_layer_set_text(s_time_layer, s_time_text);
 
-  if (view.record.lifecycle == SESSION_RUNNING) {
+  if (view.record.lifecycle == SESSION_RUNNING || view.record.lifecycle == SESSION_PAUSED) {
     snprintf(s_countdown_text, sizeof(s_countdown_text), "%02d:%02d",
              (int)(view.remaining_seconds / 60), (int)(view.remaining_seconds % 60));
-    snprintf(s_phase_text, sizeof(s_phase_text), "%s", prv_phase_name(view.record.phase));
+    if (view.record.lifecycle == SESSION_PAUSED) {
+      snprintf(s_phase_text, sizeof(s_phase_text), "PAUSED: %s", prv_phase_name(view.record.phase));
+      text_layer_set_font(s_phase_layer, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD));
+    } else {
+      snprintf(s_phase_text, sizeof(s_phase_text), "%s", prv_phase_name(view.record.phase));
+      text_layer_set_font(s_phase_layer, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD));
+    }
   } else {
     snprintf(s_countdown_text, sizeof(s_countdown_text), "--:--");
     snprintf(s_phase_text, sizeof(s_phase_text), "Ready");
+    text_layer_set_font(s_phase_layer, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD));
   }
   text_layer_set_text(s_countdown_layer, s_countdown_text);
   text_layer_set_text(s_phase_layer, s_phase_text);
@@ -129,7 +136,7 @@ static void prv_menu_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex 
   if (view.record.lifecycle == SESSION_INACTIVE) {
     title = "Start";
   } else if (cell_index->row == 0) {
-    title = "Pause";
+    title = view.record.lifecycle == SESSION_PAUSED ? "Resume" : "Pause";
   } else if (cell_index->row == 1) {
     title = "Skip";
   } else {
@@ -150,11 +157,10 @@ static void prv_menu_select(MenuLayer *menu_layer, MenuIndex *cell_index, void *
   (void)context;
   SessionView view;
   session_coordinator_get_view(&view);
-  bool unimplemented = view.record.lifecycle == SESSION_RUNNING && cell_index->row < 2;
-  session_coordinator_select_menu_row(cell_index->row);
-  if (unimplemented) {
+  if (cell_index->row == 1 && view.record.lifecycle != SESSION_INACTIVE) {
     return;
   }
+  session_coordinator_select_menu_row(cell_index->row);
   window_stack_pop(true);
   app_timer_register(5, prv_render_cb, NULL);
 }
@@ -178,6 +184,10 @@ static void prv_menu_window_unload(Window *window) {
 }
 
 static void prv_select_click_handler(ClickRecognizerRef recognizer, void *context) {
+  if (session_coordinator_resume_if_paused()) {
+    app_timer_register(5, prv_render_cb, NULL);
+    return;
+  }
   window_stack_push(s_menu_window, true);
 }
 

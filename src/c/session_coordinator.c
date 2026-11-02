@@ -11,6 +11,8 @@ enum {
 
 typedef enum {
   EVENT_START,
+  EVENT_PAUSE,
+  EVENT_RESUME,
   EVENT_STOP,
   EVENT_MENU_SELECT,
   EVENT_RECOVER,
@@ -42,6 +44,7 @@ static void prv_rollover_tally(time_t now);
 static void prv_count_completion(SessionRecord *record, SessionPhase phase, int64_t completed_at,
                                  int32_t today);
 static void prv_reset_tally_day(SessionRecord *record, int32_t day);
+static void prv_wakeup(const SessionEvent *event);
 
 static void prv_reconcile_phase(SessionRecord *record, time_t now, bool overdue_recovery) {
   int32_t today = prv_local_day(now);
@@ -143,8 +146,105 @@ static void prv_start(void) {
   s_error = SESSION_ERROR_NONE;
 }
 
-static void prv_stop(void) {
+static bool prv_reconcile_before_command(time_t now) {
+  if (s_record.lifecycle != SESSION_RUNNING || now < s_record.deadline_utc) {
+    return true;
+  }
+  if (s_record.wakeup_id < 0) {
+    s_error = SESSION_ERROR_WAKEUP;
+    return false;
+  }
+  SessionEvent due = { .type = EVENT_WAKEUP, .wakeup_id = s_record.wakeup_id,
+                       .cookie = (int32_t)s_record.generation };
+  prv_wakeup(&due);
+  return s_record.lifecycle == SESSION_RUNNING && s_record.deadline_utc > now &&
+         s_error == SESSION_ERROR_NONE;
+}
+
+static void prv_pause(void) {
+  time_t now;
   if (s_record.lifecycle != SESSION_RUNNING) {
+    return;
+  }
+  if (!prv_read_utc(&now)) {
+    s_error = SESSION_ERROR_CLOCK;
+    return;
+  }
+  if (!prv_reconcile_before_command(now)) {
+    return;
+  }
+  int64_t remaining = s_record.deadline_utc - now;
+  if (remaining <= 0 || remaining > INT32_MAX) {
+    s_error = SESSION_ERROR_CLOCK;
+    return;
+  }
+
+  SessionRecord candidate = s_record;
+  WakeupId old_id = candidate.wakeup_id;
+  candidate.lifecycle = SESSION_PAUSED;
+  candidate.deadline_utc = 0;
+  candidate.remaining_seconds = (int32_t)remaining;
+  candidate.wakeup_id = (WakeupId)-1;
+  if (!prv_next_generation(candidate.generation, &candidate.generation)) {
+    s_error = SESSION_ERROR_STORAGE;
+    return;
+  }
+  if (!session_store_save(&candidate)) {
+    prv_commit_failure(true);
+    return;
+  }
+  s_record = candidate;
+  if (old_id >= 0) {
+    wakeup_cancel(old_id);
+  }
+  s_error = SESSION_ERROR_NONE;
+}
+
+static void prv_resume(void) {
+  time_t now;
+  if (s_record.lifecycle == SESSION_RUNNING) {
+    if (!prv_read_utc(&now)) {
+      s_error = SESSION_ERROR_CLOCK;
+      return;
+    }
+    if (!prv_reconcile_before_command(now)) {
+      return;
+    }
+  }
+  if (s_record.lifecycle != SESSION_PAUSED) {
+    return;
+  }
+  if (!prv_read_utc(&now) || (uint64_t)now > (uint64_t)INT32_MAX -
+                                             (uint32_t)s_record.remaining_seconds) {
+    s_error = SESSION_ERROR_CLOCK;
+    return;
+  }
+
+  SessionRecord candidate = s_record;
+  candidate.lifecycle = SESSION_RUNNING;
+  candidate.deadline_utc = (int64_t)now + candidate.remaining_seconds;
+  candidate.remaining_seconds = 0;
+  if (!prv_next_generation(candidate.generation, &candidate.generation)) {
+    s_error = SESSION_ERROR_STORAGE;
+    return;
+  }
+  WakeupId candidate_id;
+  if (!prv_schedule(&candidate, &candidate_id)) {
+    s_error = SESSION_ERROR_WAKEUP;
+    return;
+  }
+  candidate.wakeup_id = candidate_id;
+  if (!session_store_save(&candidate)) {
+    wakeup_cancel(candidate_id);
+    prv_commit_failure(true);
+    return;
+  }
+  s_record = candidate;
+  s_error = SESSION_ERROR_NONE;
+}
+
+static void prv_stop(void) {
+  if (s_record.lifecycle != SESSION_RUNNING && s_record.lifecycle != SESSION_PAUSED) {
     return;
   }
   SessionRecord candidate = s_record;
@@ -156,13 +256,16 @@ static void prv_stop(void) {
     return;
   }
   candidate.deadline_utc = 0;
+  candidate.remaining_seconds = 0;
   candidate.wakeup_id = (WakeupId)-1;
   if (!session_store_save(&candidate)) {
     prv_commit_failure(true);
     return;
   }
   s_record = candidate;
-  wakeup_cancel(old_id);
+  if (old_id >= 0) {
+    wakeup_cancel(old_id);
+  }
   s_error = SESSION_ERROR_NONE;
 }
 
@@ -347,6 +450,7 @@ static void prv_wakeup(const SessionEvent *event) {
   }
   candidate.haptic_generation = candidate.generation;
   candidate.wakeup_id = (WakeupId)-1;
+  candidate.remaining_seconds = 0;
   WakeupId id;
   if (!prv_schedule(&candidate, &id)) {
     s_error = SESSION_ERROR_WAKEUP;
@@ -378,8 +482,15 @@ static void prv_process(const SessionEvent *event) {
   if (event->type == EVENT_MENU_SELECT) {
     if (event->row == 0 && s_record.lifecycle == SESSION_INACTIVE) {
       prv_start();
-    } else if (event->row == 2 && s_record.lifecycle == SESSION_RUNNING) {
-      if (s_record.deadline_utc > 0 && prv_read_utc(&now) && now >= s_record.deadline_utc) {
+    } else if (event->row == 0 && s_record.lifecycle == SESSION_RUNNING) {
+      prv_pause();
+    } else if (event->row == 0 && s_record.lifecycle == SESSION_PAUSED) {
+      prv_resume();
+    } else if (event->row == 2 && (s_record.lifecycle == SESSION_RUNNING ||
+                                   s_record.lifecycle == SESSION_PAUSED)) {
+      if (s_record.lifecycle == SESSION_RUNNING && s_error != SESSION_ERROR_WAKEUP &&
+          s_error != SESSION_ERROR_STORAGE && s_record.deadline_utc > 0 &&
+          prv_read_utc(&now) && now >= s_record.deadline_utc) {
         SessionEvent due = { .type = EVENT_WAKEUP, .wakeup_id = s_record.wakeup_id,
                              .cookie = (int32_t)s_record.generation };
         prv_wakeup(&due);
@@ -426,6 +537,10 @@ static void prv_process(const SessionEvent *event) {
       prv_wakeup(&due);
     }
     prv_start();
+  } else if (event->type == EVENT_PAUSE) {
+    prv_pause();
+  } else if (event->type == EVENT_RESUME) {
+    prv_resume();
   } else if (event->type == EVENT_STOP) {
     if (s_record.lifecycle == SESSION_RUNNING && s_error != SESSION_ERROR_WAKEUP &&
         s_error != SESSION_ERROR_STORAGE && s_record.deadline_utc > 0 &&
@@ -498,6 +613,22 @@ void session_coordinator_start(void) {
   prv_enqueue((SessionEvent){ .type = EVENT_START });
 }
 
+void session_coordinator_pause(void) {
+  prv_enqueue((SessionEvent){ .type = EVENT_PAUSE });
+}
+
+void session_coordinator_resume(void) {
+  prv_enqueue((SessionEvent){ .type = EVENT_RESUME });
+}
+
+bool session_coordinator_resume_if_paused(void) {
+  if (s_record.lifecycle != SESSION_PAUSED) {
+    return false;
+  }
+  session_coordinator_resume();
+  return true;
+}
+
 void session_coordinator_stop(void) {
   prv_enqueue((SessionEvent){ .type = EVENT_STOP });
 }
@@ -539,5 +670,7 @@ void session_coordinator_get_view(SessionView *view) {
     if (prv_valid_utc(now) && now < s_record.deadline_utc) {
       view->remaining_seconds = (int32_t)(s_record.deadline_utc - now);
     }
+  } else if (s_record.lifecycle == SESSION_PAUSED) {
+    view->remaining_seconds = s_record.remaining_seconds;
   }
 }

@@ -7,6 +7,7 @@
 typedef enum {
   SESSION_INACTIVE = 0,
   SESSION_RUNNING = 1,
+  SESSION_PAUSED = 2,
 } SessionLifecycle;
 
 typedef enum {
@@ -22,6 +23,7 @@ typedef struct {
   uint32_t generation;
   uint32_t haptic_generation;
   int64_t deadline_utc;
+  int32_t remaining_seconds;
   WakeupId wakeup_id;
   int32_t tally_day;
   uint16_t sit_count;
