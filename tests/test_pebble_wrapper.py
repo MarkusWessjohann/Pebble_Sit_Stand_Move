@@ -26,6 +26,17 @@ class PebbleWrapperTest(unittest.TestCase):
         self.assertEqual(run.call_args_list[1].args[0], ["uv", "run", "--locked", "pebble", "build"])
 
     @patch("pebble_wrapper.subprocess.run")
+    @patch("pebble_wrapper.sys.argv", ["pebble.py", "build"])
+    def test_runs_project_command_when_active_sdk_is_on_installed_sdks_line(self, run):
+        run.side_effect = [
+            type("Result", (), {"returncode": 0, "stdout": "Installed SDKs: 4.33.1 (active)\n", "stderr": ""})(),
+            type("Result", (), {"returncode": 0})(),
+        ]
+
+        self.assertEqual(pebble_wrapper.main(), 0)
+        self.assertEqual(run.call_count, 2)
+
+    @patch("pebble_wrapper.subprocess.run")
     @patch("pebble_wrapper.sys.argv", ["pebble.py", "install", "--emulator", "emery"])
     def test_blocks_command_when_sdk_pin_is_not_active(self, run):
         run.return_value = type(

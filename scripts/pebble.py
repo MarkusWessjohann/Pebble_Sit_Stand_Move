@@ -17,7 +17,10 @@ def main() -> int:
         return sdk_list.returncode
 
     expected = f"{sdk_version} (active)"
-    if expected not in (line.strip() for line in sdk_list.stdout.splitlines()):
+    if not any(
+        line.strip() in (expected, f"Installed SDKs: {expected}")
+        for line in sdk_list.stdout.splitlines()
+    ):
         print(
             f"Pebble SDK {sdk_version} must be active before this project command.\n"
             f"Run `pebble sdk list` and activate {sdk_version} in the host Pebble SDK manager.",

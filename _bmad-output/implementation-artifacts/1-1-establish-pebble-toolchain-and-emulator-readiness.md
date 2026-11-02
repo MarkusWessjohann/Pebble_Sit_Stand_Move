@@ -2,7 +2,7 @@
 title: 'Establish Pebble toolchain readiness and emulator evidence'
 type: 'feature'
 created: '2026-10-23'
-status: 'in-progress'
+status: 'in-review'
 baseline_commit: 'cca3e12d1c48944a2cfd1bb39ae732c2d5dee7c0'
 route: 'dispatch'
 review_loop_iteration: 0
@@ -10,7 +10,7 @@ context:
   - _bmad-output/implementation-artifacts/epic-1-context.md
 ---
 
-**Current status (2026-11-01):** 2 of 5 acceptance criteria are met; AC1 to AC3 are open. Missing evidence: raw `pebble sdk list` output, the SDK path the locked CLI selects, transcripts and artifact identity for clean and repeated build/install runs, and the emulator Wakeup observations (callback, haptic request, foreground, timing, emulator version). The owner reports these as working but has not supplied them. Physical Pebble Time 2 acceptance belongs to Story 1.8. Open owner decisions are listed under Implementation Notes.
+**Current status (2026-11-02):** 2 of 5 acceptance criteria are met; AC1 to AC3 are open. The local C coordinator and four wrapper tests pass, and the uv lockfile check passes. The owner supplied `pebble --version` output from the external host: `Pebble Tool v5.1.2 (active SDK: v4.33.1)`, and identified `pebble install --emulator emery --logs` as the emulator command. Remaining evidence includes the SDK path selected by the locked CLI, complete output and artifact identity for clean and repeated builds/installs, and emulator Wakeup observations (callback, haptic request, foreground, timing, emulator version). The Pebble CLI and emulator are unavailable only inside this sandbox; the owner reports the external host tools and emulator are working. Physical Pebble Time 2 acceptance belongs to Story 1.8. Open owner decisions are listed under Implementation Notes.
 
 <frozen-after-approval reason="human-owned intent — renegotiated by the project owner on 2026-10-31">
 
@@ -74,6 +74,7 @@ context:
 
 - *Pins (file).* Pebble Tool 5.0.40 (`pyproject.toml`, `uv.lock`), Python 3.13.5 (`.python-version`), SDK 4.33.1 (`.pebble-sdk-version`, added 2026-11-01). `package.json` declares SDK API level 3, which is not a package pin. The owner's global Tool 5.1.2 failed `pebble install --emulator emery` (`KeyError: 'endpoint'` in `libpebble2`, run under Python 3.15). The owner reports the locked 5.0.40 / Python 3.13 combination works; the effect of each variable was not isolated, so the reason for the pin is not established.
 - *SDK (owner, 2026-11-01).* `pebble sdk list` printed `Installed SDKs: 4.33.1 (active)`. This confirms the active SDK in the owner's environment. It does not confirm the SDK the locked CLI selects. The raw multi-line output was not captured.
+- *External host tools (owner, 2026-11-02).* The owner supplied `pebble --version` output: `Pebble Tool v5.1.2 (active SDK: v4.33.1)`, and reports the external build tools and emulator are working. The owner identified `pebble install --emulator emery --logs` as the emulator invocation. This is global Tool 5.1.2, not evidence from the project-locked Tool 5.0.40, and no command result or emulator log was included in the message.
 - *Wrapper (file, 2026-11-01).* `scripts/pebble.py` runs `pebble sdk list` through the locked CLI and runs the requested command only if a line equals `4.33.1 (active)`. The three unit tests use stubbed output. The wrapper has not run against a real CLI in any recorded environment.
 - *Build and install (owner).* The owner reports that the clean, build, and install commands all succeeded with SDK 4.33.1 under the locked CLI. Transcripts, exit codes, artifact identity, and the selected SDK path were not supplied.
 - *Emulator Wakeup (owner).* The owner reports separate phase and timed-pause emulator tests succeeded. Callback logs, haptic-request evidence, foreground state, timing, and emulator version were not supplied. That harness no longer exists at HEAD (see Code Map), and which revision the owner tested is not recorded.
@@ -117,6 +118,24 @@ context:
 - false — "The story title is mismatched with the epic". Title now matches in substance; the slug was the mismatch and is renamed.
 - deferred to owner — Run count, artifact identity, closure rule, Story 1.8 tolerance, and platform scope (listed under Implementation Notes). They change the frozen intent or are product decisions.
 
+### Review 2026-11-02 (blind content, edge-case, verification-gap)
+
+- patch — `scripts/pebble.py` matched only a standalone SDK row, while owner-reported output can place the active SDK on `Installed SDKs:`. The guard now accepts both observed line shapes; added a wrapper test for the header-line format. `python3 -m unittest tests.test_pebble_wrapper` passes (4 tests).
+- patch — Epic Story 1.1 still named a minimal diagnostic app after the diagnostic harness had been replaced. Updated its acceptance wording to the app at a recorded commit, consistent with this story.
+- patch — Epic 1.2 dependency wording did not record the owner's waiver to proceed while Story 1.1 remains open. Recorded the 2026-10-31 authorization and clarified it does not close Story 1.1.
+- patch — Architecture still described the C SDK pin as unresolved. Updated the Stack and Story 1.1 deferred-work entry to record project pin 4.33.1 and distinguish the missing locked-build SDK path and reproducibility evidence.
+- patch — Platform verification table labeled the emulator install as resolved by the locked CLI without making clear this is owner-reported and not independently verified. Corrected the provenance label.
+- defer — `src/c/session_coordinator.c` can retain a consumed Wakeup identity when early-callback repair scheduling or persistence fails. Failure is surfaced, but a reliable retry/recovery policy is not specified by this story; implementation belongs with coordinator behavior and should be decided before release.
+- defer — `prv_valid_utc()` accepts every positive timestamp. A minimum plausible UTC boundary is not specified in the story or architecture; product/clock policy is needed before changing behavior.
+- defer — The bounded coordinator queue drops events when full, including Stop/Wakeup events. Queue-pressure policy is a pre-existing coordinator design issue requiring a safe coalescing/reservation decision.
+- defer — The fixed-height error text layer may not fit all visible errors on the watch. Verify message legibility/layout on Pebble Time 2 in Story 1.8.
+- defer — The active menu includes Skip before Story 1.6 implements it. Story 1.2 explicitly established the menu surface and deferred the action; wire it in Story 1.6.
+- defer — The native Pebble MenuLayer callback is not exercised by host tests; Story 1.2 already records this verification limitation and assigns actual UI behavior to the SDK/device pass.
+- defer to owner — The owner has not decided whether repeatable build evidence covers all seven manifest platforms or only `emery`; the decision remains listed under Implementation Notes.
+- defer to owner — The exact revision used for owner-reported emulator Wakeup tests is still unknown; this is already recorded in Implementation Notes and platform verification and requires host evidence.
+- false — The active Skip row was reported as a silent no-op. Story 1.2 explicitly deferred Skip behavior to Story 1.6 while establishing the menu surface, so adding feedback or dispatch here would expand that story's scope.
+- defer — Verification-gap review found native MenuLayer selection is not covered by host tests. Existing coordinator tests and source inspection are insufficient to exercise the SDK callback; record a native SDK/device test with Story 1.8 acceptance.
+
 ## Verification
 
 **Commands (to run on a host with the Pebble CLI; the sandbox cannot):**
@@ -124,5 +143,7 @@ context:
 - `uv run --locked python scripts/pebble.py clean`, then `build`, with output and exit code captured. Record the SDK lines from `build/config.log` and `sha256sum build/*.pbw`. Repeat for the agreed run count.
 - `uv run --locked python scripts/pebble.py install --emulator emery`, then `uv run --locked pebble logs`, recording the emulator version.
 - `sh scripts/test.sh` -- host-side tests; they do not exercise the Pebble SDK.
+
+**Locally run 2026-11-02:** `sh scripts/test.sh` passed (C coordinator and 4 wrapper tests); `uv lock --check --offline` passed. `python3 --version` returned 3.13.5 and `uv --version` returned 0.12.3. `pebble`, `pebble-tool`, and `pebble-emulator` are unavailable in this sandbox, so host SDK/build/install and emulator commands were not run here. The owner reports those tools work outside the sandbox; supplied host evidence is recorded in `platform-verification.md`.
 
 **Manual checks:** Verify every result is labeled locally observed, owner-reported, or untested. Confirm emulator evidence is not presented as physical-device acceptance and that physical tests are assigned to Story 1.8. Haptic evidence from the emulator is a logged API call, not observed vibration.

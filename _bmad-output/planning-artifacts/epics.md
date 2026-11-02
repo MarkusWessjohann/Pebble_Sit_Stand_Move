@@ -140,11 +140,11 @@ So that implementation can begin on a known toolchain without treating emulator 
 **When** readiness is established
 **Then** the exact CLI, Python, and C SDK package/version are pinned and recorded, distinguishing manifest SDK API level from package version.
 
-**Given** the pinned toolchain and a minimal diagnostic app
+**Given** the pinned toolchain and the app at a recorded commit
 **When** documented clean/repeated build and available emulator install procedures are run
 **Then** commands, outcomes, and artifact identity are recorded as reproducible; any owner-reported results are identified as such and are not presented as locally verified.
 
-**Given** the diagnostic app is available in the emulator
+**Given** the app build under test is available in the emulator
 **When** phase-deadline and timed-pause Wakeups are observed separately
 **Then** available callback, haptic-request, app-open/foreground, and timing evidence is recorded with its source; emulator observations are not physical-device results.
 
@@ -164,7 +164,7 @@ So that I can control reminders directly from Pebble Time 2.
 
 **Requirements:** FR1, NFR1, NFR4–NFR5, NFR7–NFR8, UX-DR1–UX-DR5, UX-DR8–UX-DR13.
 
-**Dependency:** Story 1.1's pinned toolchain and reproducible build/install readiness must be complete before implementation stories begin. Physical-device acceptance is deferred to Story 1.8 and does not block this story.
+**Dependency:** Story 1.1's pinned toolchain and reproducible build/install readiness should be complete before implementation stories begin. On 2026-10-31, the owner authorized Stories 1.2 and 1.3 to proceed while Story 1.1 remains open; this waiver does not satisfy or close Story 1.1. Physical-device acceptance is deferred to Story 1.8 and does not block this story.
 
 **Acceptance Criteria:**
 
