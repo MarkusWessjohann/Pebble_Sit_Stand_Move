@@ -2,7 +2,7 @@
 title: 'Establish Pebble toolchain readiness and emulator evidence'
 type: 'feature'
 created: '2026-10-23'
-status: 'in-review'
+status: 'in-progress'
 baseline_commit: 'cca3e12d1c48944a2cfd1bb39ae732c2d5dee7c0'
 route: 'dispatch'
 review_loop_iteration: 0
@@ -10,7 +10,7 @@ context:
   - _bmad-output/implementation-artifacts/epic-1-context.md
 ---
 
-**Current status (2026-11-02):** 2 of 5 acceptance criteria are met; AC1 to AC3 are open. The local C coordinator and four wrapper tests pass, and the uv lockfile check passes. The owner supplied `pebble --version` output from the external host: `Pebble Tool v5.1.2 (active SDK: v4.33.1)`, and identified `pebble install --emulator emery --logs` as the emulator command. Remaining evidence includes the SDK path selected by the locked CLI, complete output and artifact identity for clean and repeated builds/installs, and emulator Wakeup observations (callback, haptic request, foreground, timing, emulator version). The Pebble CLI and emulator are unavailable only inside this sandbox; the owner reports the external host tools and emulator are working. Physical Pebble Time 2 acceptance belongs to Story 1.8. Open owner decisions are listed under Implementation Notes.
+**Current status (2026-11-02):** 2 of 5 acceptance criteria are met; AC1 to AC3 are open. The local C coordinator and four wrapper tests pass, and the uv lockfile check passes. The owner supplied `pebble --version` output from the external host: `Pebble Tool v5.1.2 (active SDK: v4.33.1)`, and identified `pebble install --emulator emery --logs` as the emulator command. The owner confirms the phase-deadline and timed-pause emulator tests were run and worked. AC3 remains open because the tested revision, emulator version, callback/haptic-request/foreground observations, and timing were not supplied. Remaining AC1–AC2 evidence includes the SDK path selected by the locked CLI and complete output/artifact identity for clean and repeated builds/installs. The Pebble CLI and emulator are unavailable only inside this sandbox; the owner reports the external host tools and emulator are working. Physical Pebble Time 2 acceptance belongs to Story 1.8. Open owner decisions are listed under Implementation Notes.
 
 <frozen-after-approval reason="human-owned intent — renegotiated by the project owner on 2026-10-31">
 
@@ -68,6 +68,20 @@ context:
 - [x] AC4: Given physical-device acceptance requires the finished app, when Story 1.1 is handed off, then Pebble Time 2 capability, timing, operational-limit, reliability, and finished-UI checks are assigned to pre-release Story 1.8 after Stories 1.2–1.7, and no physical result is claimed here.
 - [x] AC5: Given any readiness evidence remains incomplete, when Story 1.1 status is updated, then the missing evidence is stated and the story remains open; it is not marked done.
 
+### Review Findings
+
+- [x] [Review][Patch] Keep the readiness gate scoped to the explicitly waived stories — Restored the readiness prerequisite for implementation stories after the explicit waiver for Stories 1.2 and 1.3. [_bmad-output/planning-artifacts/epics.md:167]
+
+**Rejected**
+
+- false — AC1–AC3 remain open, but the story accurately lists the evidence gaps, remains `in-progress` rather than `done`, and satisfies AC5’s requirement not to mark incomplete readiness as done.
+- false — The verification procedure already names clean/build, repeated runs, output and artifact-hash capture, emulator install/logs, and the platform report’s separate phase/timed-pause procedures; missing run results are explicitly recorded as open evidence.
+- false — Existing artifact hashes are labeled as inspected files without build provenance, and the platform report explicitly says they do not establish reproducibility.
+- false — The owner’s `pebble sdk list` output is paraphrased as `Installed SDKs: 4.33.1 (active)`; the raw multi-line output is separately stated as not captured.
+- false — The architecture’s “Python 3.13” wording is compatible with the exact project pin of 3.13.5 recorded elsewhere.
+- false — The wrapper’s real-CLI output remains untested, but this limitation is recorded as outstanding AC1 evidence; it is not represented as verified.
+- false — Emulator callback, haptic-request, foreground, timing, and version details remain outstanding under AC3 and are not claimed as verified; the owner's success report is recorded as owner-reported.
+
 ## Implementation Notes
 
 **Evidence status.** Each fact carries its source: *local* (run in the sandbox), *owner* (reported, no transcript), or *file* (inspected in the repository).
@@ -77,7 +91,7 @@ context:
 - *External host tools (owner, 2026-11-02).* The owner supplied `pebble --version` output: `Pebble Tool v5.1.2 (active SDK: v4.33.1)`, and reports the external build tools and emulator are working. The owner identified `pebble install --emulator emery --logs` as the emulator invocation. This is global Tool 5.1.2, not evidence from the project-locked Tool 5.0.40, and no command result or emulator log was included in the message.
 - *Wrapper (file, 2026-11-01).* `scripts/pebble.py` runs `pebble sdk list` through the locked CLI and runs the requested command only if a line equals `4.33.1 (active)`. The three unit tests use stubbed output. The wrapper has not run against a real CLI in any recorded environment.
 - *Build and install (owner).* The owner reports that the clean, build, and install commands all succeeded with SDK 4.33.1 under the locked CLI. Transcripts, exit codes, artifact identity, and the selected SDK path were not supplied.
-- *Emulator Wakeup (owner).* The owner reports separate phase and timed-pause emulator tests succeeded. Callback logs, haptic-request evidence, foreground state, timing, and emulator version were not supplied. That harness no longer exists at HEAD (see Code Map), and which revision the owner tested is not recorded.
+- *Emulator Wakeup (owner, 2026-11-02).* The owner confirms separate phase-deadline and timed-pause emulator tests were run and worked. The tested revision, emulator version, callback logs, haptic-request evidence, foreground state, and timing were not supplied. That diagnostic harness no longer exists at HEAD (see Code Map), and which revision the owner tested is not recorded; these gaps keep AC3 open.
 - *Existing artifacts (file).* `build/emery/pebble-app.elf`, `build/sit_stand_go.pbw`, and `build/sit_stand_walk.pbw` exist, and `build/config.log` records Waf 2.1.4 and SDK paths including 4.33.1. None shows that the current source builds reproducibly. Hashes are in `platform-verification.md`.
 - *Sandbox (local, 2026-10-31).* `python3` is 3.13.5 and `uv` is 0.12.3. `pebble`, `pebble-tool`, and `pebble-emulator` are absent, so Pebble commands fail with `command not found`. `uv lock --check --offline` passes. `uv run --locked pebble --version` failed because uv could not download `greenlet==3.5.6` through the proxy. Full command outcomes are in `platform-verification.md`.
 
