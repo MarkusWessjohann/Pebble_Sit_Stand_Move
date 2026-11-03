@@ -247,9 +247,11 @@ Fill in only after sections 2 to 11 are complete.
 
 | Item | Entry |
 |---|---|
-| Rows not `Pass` (list them, with limitation and evidence) | _not recorded_ |
-| Owner resolution of affected scope or acceptance | _not recorded_ |
-| Release decision (`Release` / `Do not release`) | _not recorded_ |
-| Owner, date | |
+| Rows not `Pass` (list them, with limitation and evidence) | All rows in sections 2 to 11 are `Not run`. No physical check was performed and no physical acceptance passed. Timing tolerance and repeat count were never set. |
+| Owner resolution of affected scope or acceptance | **Waiver.** The owner closed Story 1.8 on 2026-11-03 without running this protocol. The waiver closes the story in sprint tracking only. It is not a physical-acceptance pass, and it does not establish Wakeup, haptic, foreground, timing, UI or battery behavior on Pebble Time 2. |
+| Release decision (`Release` / `Do not release`) | _not recorded_ (the owner closed the story but did not record a release decision) |
+| Owner, date | Mwe, 2026-11-03 (waiver of the physical checks) |
 
 **Rule:** If any required row is not `Pass`, record the limitation and evidence. Story 1.8 stays open and release is blocked until the product owner resolves the affected scope or acceptance. Do not claim physical acceptance passed. Story 1.1 also stays open. This record does not close it.
+
+**Waiver note (2026-11-03):** Story 1.8 is `done` in sprint tracking by owner waiver, not by acceptance. The rule above is unchanged: nothing here shows physical acceptance passed. The protocol remains available if the owner decides to run it later.
