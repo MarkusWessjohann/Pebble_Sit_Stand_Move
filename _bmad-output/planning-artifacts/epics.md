@@ -1,6 +1,7 @@
 ---
 status: final
 updated: 2026-11-03
+epic3Pass: step-04-final-validation  # Epic 3 (settings): validated and complete
 stepsCompleted:
   - step-01-validate-prerequisites
   - step-02-design-epics
@@ -40,6 +41,14 @@ FR7: The user can extend the active phase by +5 or +10 minutes. Each extension a
 
 FR8: Before release, the project owner verifies the finished app on Pebble Time 2, including a full 45/10/5 cycle, background reminder behavior, haptics, app foregrounding, timing, recovery, device limits, reliability, and UI/control usability.
 
+**Epic 3 additions (2026-11-03, owner-requested settings menu):**
+
+FR9: The app provides a Settings entry in the native watch menu, visible in every lifecycle state (inactive, running, paused, timed-paused). Settings lets the owner choose the haptic notification pattern: **Short**, **Long**, **Double**, or **Until Select**. The choice is persisted across app restarts and independently of the session record, so Stop, Start, and session-record recovery never reset it. The default is **Short**, which preserves the current single short pulse.
+
+FR10: The chosen pattern applies to every haptic request: automatic phase transition, Skip, and timed-pause end. Events that do not request a haptic (Start, manual Pause, Resume, Stop, Extend) remain silent regardless of the setting.
+
+FR11: With **Until Select**, the haptic repeats until the owner presses Select, then stops. The Select press that dismisses the alert is consumed and does not trigger the middle-control action (it must not start a 30-minute timed pause or resume). The repeat also stops on a safety cap (2 minutes; owner decision 2026-11-03), on Stop, when a newer haptic-requesting transition supersedes it, and when the app exits. Stopping is always silent.
+
 ### NonFunctional Requirements
 
 NFR1: The application targets Pebble Time 2 and must be operable from the watch without phone interaction during a session. Timing must continue after the app leaves the foreground; operation after explicit app termination is not required.
@@ -60,6 +69,14 @@ NFR8: The watch interface must remain legible and textually identify phase, life
 
 NFR9: Before implementation, pin the exact Pebble CLI, Python, and C SDK package/version and record reproducible build/install evidence using the available workflow. Record physical-device verification results in Story 1.8 before release; emulator results do not establish physical-device behavior.
 
+**Epic 3 amendments (2026-11-03):**
+
+NFR6 (amended): Haptic is the only notification mode, but its pattern is owner-selectable (FR9). The set of events that request a haptic is unchanged. Physical delivery of each pattern remains best-effort and must be verified on the device.
+
+NFR10: A haptic request is still a single committed attempt per transition. The persisted haptic-attempt marker is written before the first vibration and is never replayed after recovery. Repeating (Until Select) is a presentation of that one attempt, not a retry. A relaunch after the app exits does not resume repeating.
+
+NFR11: The haptic setting lives in its own small persistent-storage key. It must not change the versioned session record schema, and a missing, corrupt, or unsupported value falls back to **Short** without surfacing an error.
+
 ### Additional Requirements
 
 - The architecture specifies one native Pebble C watch app using an event-driven state machine. The Session Coordinator is the sole owner and mutation boundary for lifecycle state, active phase, deadlines, persistence, and Wakeup scheduling; the UI renders coordinator state and dispatches commands.
@@ -73,6 +90,7 @@ NFR9: Before implementation, pin the exact Pebble CLI, Python, and C SDK package
 - No starter template is specified in the Architecture. The suggested `src/` files are a structural seed, not a required layout. No separate migration, cloud integration, or deployment service is specified.
 - The product brief confirms watch-first use, the 45/10/5 schedule, manual controls, timed-pause behavior, deterministic recovery, UTC authority, and the out-of-scope items reflected above. Where brief wording differs in detail, the final PRD, Architecture, and UX contract provide the implementation-level requirements.
 - Product/UX decisions confirmed: native menu order is Start when inactive and Pause/Resume, Skip, Stop while active; phase icons are monochrome chair/standing-person/moving-person paired with text; timed-pause alternatives use shorter-on-top and longer-on-bottom (30-minute entry shows 5/10); daily tally uses local calendar day, persists across app restarts, aggregates across sessions, and resets at local midnight.
+- Epic 3 constraints from the code: `prv_request_haptic()` in `src/c/session_coordinator.c` is the single haptic call site (currently `vibes_short_pulse()`), and all haptic requests flow through it. Select is also the middle control (`session_coordinator_middle_control()`), so the dismiss press must be intercepted before it. The setting needs its own persist key beside `SESSION_STORE_KEY`.
 - Physical-device decisions to verify with the finished app before release in Story 1.8: Pebble Wakeup delivery after leaving the app, haptic delivery, app foregrounding, and measurable phase-transition tolerance on the target firmware.
 
 ### UX Design Requirements
@@ -113,6 +131,14 @@ UX-DR16: Show each hardware-button label at the right screen edge, vertically le
 
 UX-DR17: The active phase countdown remains the strongest visual element (UX-DR4) and the phase icon and name stay directly below it (UX-DR3). The countdown, icon, and phase name form one block centered on the screen in both directions, the clock is centered on the screen width, and the labels sit 5 px in from the right edge (2026-11-03 owner changes, superseding the narrowed content column). Countdown, icon, phase name, tally, button labels, and error text do not overlap or clip. Verify on Pebble Time 2 hardware, with emulator evidence recorded separately.
 
+**Epic 3 additions (2026-11-03, owner-requested settings menu; supersede UX-DR1 and the Story 1.2 "no settings" criterion for the Settings entry only):**
+
+UX-DR18: Add a native menu row **Settings** as the last row in every lifecycle state: Start/Settings when inactive; Pause or Resume, Skip, Stop, Settings when active. The existing row order and labels are otherwise unchanged. Settings opens one native menu window; no other new surface is introduced, and UX-DR1's exclusion of phone, history, and analytics surfaces still holds.
+
+UX-DR19: The Settings window lists four rows in this order: `Short`, `Long`, `Double`, `Until Select`. The current choice is marked with readable text (for example a leading `*` or a `Selected` subtitle), not color alone. Selecting a row saves it, gives one preview of that pattern (for Until Select, a single short preview rather than the repeating alert), and returns to the previous screen. Back leaves the setting unchanged.
+
+UX-DR20: While an Until Select alert is repeating, the session view shows a concise text cue (for example `Select to stop`) that does not overlap or clip the countdown, icon, phase name, tally, or button labels. Pressing Select stops the alert and removes the cue. Other buttons do not dismiss it and keep their normal functions.
+
 ### FR Coverage Map
 
 FR1: Epic 1 - Start and stop a session from the watch.
@@ -124,12 +150,23 @@ FR6: Epic 1 - Skip the active phase.
 FR7: Epic 1 - Extend the active phase by +5 or +10 minutes.
 FR8: Epic 1 - Verify the finished app on Pebble Time 2 before release.
 
+FR9: Epic 3 - Settings menu with a persisted haptic pattern choice.
+FR10: Epic 3 - Chosen pattern applies to phase transition, Skip, and timed-pause end.
+FR11: Epic 3 - Until Select repeats until Select (capped); the dismiss press is consumed.
+
 Epic 2 adds no FRs. It refines presentation requirements and covers the new UX design requirements:
 
 UX-DR14: Epic 2 - Story 2.1 - Time and tally at Gothic 24.
 UX-DR15: Epic 2 - Story 2.1 - Enlarged tally fits without clipping.
 UX-DR16: Epic 2 - Story 2.1 - Button labels at the right edge, level with the buttons.
 UX-DR17: Epic 2 - Story 2.1 - Countdown stays dominant; no overlap.
+
+Epic 3 covers the amended and new requirements:
+
+NFR6 (amended), NFR10, NFR11: Epic 3 - Selectable pattern, one haptic attempt per transition, separate setting storage.
+UX-DR18: Epic 3 - Settings row in the native menu, all states.
+UX-DR19: Epic 3 - Settings window with a text-marked current choice.
+UX-DR20: Epic 3 - Select-to-stop cue while an Until Select alert repeats.
 
 ## Epic List
 
@@ -144,6 +181,12 @@ The owner can start and stop a session on Pebble Time 2, follow the repeating Si
 The owner can read the current time and the daily tally more easily, and can see what each right-side hardware button does because its label sits next to that button. This epic changes layout and presentation only; session behavior, timing, and the coordinator are unchanged. It builds on Epic 1's session view and does not reopen Story 1.8.
 
 **FRs covered:** none new. Refines NFR8 and UX-DR3, UX-DR4, and UX-DR6; adds UX-DR14–UX-DR17.
+
+### Epic 3: Choose how the watch notifies me
+
+The owner can open Settings from the native watch menu and choose the haptic pattern: Short, Long, Double, or Until Select. Phase transitions, Skip, and timed-pause end use the chosen pattern; with Until Select the alert repeats until the owner presses Select, with a safety cap. The choice persists across restarts and Stop. Session timing, scheduling, recovery, and the Epic 1 and 2 behavior are unchanged apart from the haptic call using the chosen pattern. It builds on Epics 1 and 2 and does not reopen Story 1.8.
+
+**FRs covered:** FR9, FR10, FR11. Also covers NFR6 (amended), NFR10, NFR11, UX-DR18–UX-DR20.
 
 ## Epic 1: Run and control a sit–stand–move session from the watch
 
@@ -580,3 +623,151 @@ So that I can read the session view at a glance and know what each button does.
 **Then** evidence for each state is recorded with its source; emulator results are not presented as physical-device results, and any unverified state is stated.
 
 `DESIGN.md` and `EXPERIENCE.md` are updated in the same change so the UX contract matches the new layout.
+
+## Epic 3: Choose how the watch notifies me
+
+The owner can open Settings from the native watch menu and choose the haptic pattern: Short, Long, Double, or Until Select. Phase transitions, Skip, and timed-pause end use the chosen pattern; with Until Select the alert repeats until the owner presses Select, with a safety cap. The choice persists across restarts and Stop. Session timing, scheduling, recovery, and the Epic 1 and 2 behavior are unchanged apart from the haptic call using the chosen pattern. It builds on Epics 1 and 2 and does not reopen Story 1.8.
+
+### Story 3.1: Choose a haptic pattern in Settings
+
+As the watch owner,
+I want to pick Short, Long, or Double for my haptic notification in a Settings menu,
+So that reminders are easy to feel and recognize on my wrist.
+
+**Requirements:** FR9, FR10, NFR6 (amended), NFR11, UX-DR18, UX-DR19.
+
+**Dependencies:** Builds on Epics 1 and 2. Story 1.8 is closed by owner waiver and is not reopened. Physical-device feel of each pattern is an owner check and does not block this story. Emulator evidence is recorded as emulator evidence.
+
+**Acceptance Criteria:**
+
+**Given** the app is in any lifecycle state (inactive, running, `PAUSED`, `BREAK`)
+**When** I open the native watch menu
+**Then** `Settings` is the last row, after Start when inactive, or after Pause/Resume, Skip, and Stop when active, and the existing row order and labels are unchanged.
+
+**Given** I select `Settings`
+**When** the Settings window opens
+**Then** it lists `Short`, `Long`, and `Double` in that order, marks the current choice with readable text (not color alone), and introduces no other new surface.
+
+**Given** I select a pattern row
+**When** the choice is saved
+**Then** the pattern plays once as a preview, the choice persists, and I return to the previous screen; Back leaves the setting unchanged.
+
+**Given** no choice has ever been saved
+**When** the app runs
+**Then** the pattern is `Short`, matching the current single short pulse, and behavior is unchanged from today.
+
+**Given** a pattern is saved
+**When** I stop and restart a session, or relaunch the app
+**Then** the choice is still in effect and is not reset by Stop, Start, or session-record recovery.
+
+**Given** the saved value is missing, corrupt, or unsupported
+**When** the app loads it
+**Then** it falls back to `Short` without a visible error, and the session record schema is unchanged.
+
+**Given** the setting is stored
+**When** persistence is reviewed
+**Then** it uses its own persist key and does not alter the versioned session record.
+
+**Given** an automatic phase transition, Skip, or timed-pause end requests a haptic
+**When** the request is made
+**Then** it uses the chosen pattern through the single existing haptic call site, and still makes exactly one attempt with the haptic-attempt marker persisted first.
+
+**Given** Start, manual Pause, Resume, Stop, or Extend is performed
+**When** the command is processed
+**Then** no haptic is requested, whatever pattern is set.
+
+**Given** Settings is open while a deadline comes due
+**When** the transition is processed
+**Then** the coordinator handles it as before and the chosen pattern plays.
+
+**Given** the change is built
+**When** session behavior, timing, coordinator logic, and persistence of the session record are reviewed
+**Then** they are unchanged, and the existing tests still pass.
+
+**Given** the feature is checked on the emulator and, if available, on Pebble Time 2
+**When** evidence is recorded
+**Then** each pattern's evidence is recorded with its source; emulator results are not presented as physical-device results, and any unverified pattern is stated.
+
+`DESIGN.md` and `EXPERIENCE.md` are updated in the same change to add the Settings row and window.
+
+### Story 3.2: Repeat the alert until Select is pressed
+
+As the watch owner,
+I want an `Until Select` haptic option that keeps vibrating until I press Select,
+So that I don't miss a phase change when the watch is not on my wrist or I am busy.
+
+**Requirements:** FR11, NFR10, UX-DR19 (fourth row), UX-DR20.
+
+**Dependencies:** Builds on Story 3.1's persisted setting, Settings window, and single haptic call site. Physical-device feel is an owner check and does not block this story. Emulator evidence is recorded as emulator evidence.
+
+**Acceptance Criteria:**
+
+**Given** the Settings window is open
+**When** it renders its rows
+**Then** `Until Select` appears as the fourth row after `Short`, `Long`, and `Double`, with the current choice marked in text as before.
+
+**Given** I select `Until Select`
+**When** the choice is saved
+**Then** it persists like the other patterns, I get one short preview (not the repeating alert), and I return to the previous screen.
+
+**Given** `Until Select` is chosen and an automatic phase transition, Skip, or timed-pause end requests a haptic
+**When** the request is made
+**Then** the haptic repeats at a fixed interval until stopped, and the haptic-attempt marker is persisted once before the first vibration.
+
+**Given** the alert is repeating
+**When** the session view is shown
+**Then** a concise text cue (`Select to stop`) is visible without overlapping or clipping the countdown, icon, phase name, tally, button labels, or error text, and does not rely on color.
+
+**Given** the alert is repeating
+**When** I press Select
+**Then** the vibration stops, the cue disappears, and that press is consumed: it does not start a timed pause, resume, or open the menu.
+
+**Given** the alert is repeating
+**When** the Select press is handled
+**Then** the dismissal is decided before the middle-control dispatch (`session_coordinator_middle_control()`), so no middle-control session event is enqueued by that press, and a test verifies that no timed pause, resume, or other lifecycle change results from it.
+
+**Given** no alert is repeating, including after Stop, a cap expiry, or a dismissed alert
+**When** I press Select
+**Then** it behaves as before: middle control while a session is running, paused, or timed-paused, and the native menu opens when inactive.
+
+**Given** the alert is repeating
+**When** I press Up, Down, or long-press Select
+**Then** the alert keeps repeating and the button keeps its normal function.
+
+**Given** the alert is repeating
+**When** the safety cap is reached (2 minutes after the alert starts; owner decision 2026-11-03)
+**Then** the vibration stops by itself and the cue disappears, with no further reminder.
+
+**Given** the alert is repeating
+**When** I Stop the session, or the app exits
+**Then** the vibration stops and the cue disappears.
+
+**Given** the alert is repeating
+**When** a newer haptic-requesting transition occurs (for example Skip)
+**Then** the older alert is superseded, only one repeating alert runs, and it follows the newer transition.
+
+**Given** the alert is repeating
+**When** I start a timed pause, pause, resume, or extend using the hardware controls or menu
+**Then** those commands work as before.
+
+**Given** the app is relaunched, or recovery finds an overdue deadline, after a previous alert was marked attempted
+**When** the coordinator reconciles state
+**Then** the alert does not resume repeating, and the marked attempt is not replayed (NFR10).
+
+**Given** recovery requests a haptic for a newly reconciled transition
+**When** `Until Select` is chosen
+**Then** at most one repeating alert starts, subject to the same cap and Select dismissal.
+
+**Given** `Short`, `Long`, or `Double` is chosen
+**When** a haptic is requested
+**Then** behavior is exactly as in Story 3.1: no repeat, no cue, and Select keeps its normal function.
+
+**Given** the change is built
+**When** timing, scheduling, coordinator logic, and the session record are reviewed
+**Then** they are unchanged beyond the haptic call, and the existing tests still pass.
+
+**Given** the feature is checked on the emulator and, if available, on Pebble Time 2
+**When** evidence is recorded
+**Then** each case (dismiss, cap, supersede, Stop, relaunch) is recorded with its source; emulator results are not presented as physical-device results, and any unverified case is stated.
+
+`DESIGN.md` and `EXPERIENCE.md` are updated in the same change to describe the alert cue and Select behavior.
