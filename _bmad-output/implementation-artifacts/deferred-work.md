@@ -57,3 +57,7 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-1-enlarge-the-time-and-tally-and-place-button-labels-beside-the-buttons.md`
   summary: Cover the right-edge label text, phase text and `S%u T%u M%u` tally format with a host test, for example by extracting the formatting into a pure function that `scripts/test.sh` compiles.
   evidence: `sit_stand_move.c` is not compiled by the host harness. Swapping `shorter` and `longer`, or changing `II`, leaves every test passing. The same gap is already recorded for Stories 1.6 and 1.7.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-2-rename-app-to-sit-stand-walk.md`
+  summary: Check that "Sit Stand Walk" fits the Pebble launcher on small-screen platforms.
+  evidence: Unverified (maybe-false, would be low-to-medium); needs an emulator or device look at the app list.
