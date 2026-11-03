@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <time.h>
 
+#include "haptic_alert.h"
 #include "haptic_settings.h"
 #include "session_coordinator.h"
 
@@ -93,6 +94,9 @@ static void prv_render(void) {
     strftime(s_time_text, sizeof(s_time_text), "%H:%M", local);
   } else {
     snprintf(s_time_text, sizeof(s_time_text), "--:--");
+  }
+  if (haptic_alert_active()) {
+    snprintf(s_time_text, sizeof(s_time_text), "Select to stop");
   }
   text_layer_set_text(s_time_layer, s_time_text);
 
@@ -225,9 +229,11 @@ static void prv_menu_window_unload(Window *window) {
   s_menu_layer = NULL;
 }
 
-static const char *const s_pattern_titles[] = { "Short", "Long", "Double" };
-static const char *const s_pattern_marked_titles[] = { "* Short", "* Long", "* Double" };
-#define PATTERN_COUNT 3
+static const char *const s_pattern_titles[] = { "Short", "Long", "Double", "Until Select" };
+static const char *const s_pattern_marked_titles[] = {
+  "* Short", "* Long", "* Double", "* Until Select"
+};
+#define PATTERN_COUNT HAPTIC_PATTERN_COUNT
 
 static uint16_t prv_settings_num_rows(MenuLayer *menu_layer, uint16_t section_index,
                                       void *context) {

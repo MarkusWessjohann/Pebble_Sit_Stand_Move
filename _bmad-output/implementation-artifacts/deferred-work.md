@@ -70,3 +70,12 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-1-choose-a-haptic-pattern-in-settings.md`
   summary: Check whether a lifecycle change while the menu is open (a wakeup ending a timed pause, or recovery) can make a menu row act on a different command than the one shown.
   evidence: Unverified (medium if real). The row index is derived from live lifecycle at draw and again at select, as the pre-Settings menu already did; the Settings row only adds a constant offset. Settling it needs an emulator run with a wakeup firing while the menu is open.
+
+## Deferred from: code review of spec-3-2-repeat-the-alert-until-select-is-pressed (2026-11-03)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-2-repeat-the-alert-until-select-is-pressed.md`
+  summary: On the emery emulator and Pebble Time 2, check the `Select to stop` cue (fits the clock line at Gothic 24, appears and clears), the fourth Settings row, and Select dismissal on the session view.
+  evidence: `sit_stand_move.c` is not compiled by the host harness and the sandbox has no Pebble SDK. Dropping or inverting the `haptic_alert_active()` block keeps every host test green. About 14 characters at Gothic 24 against a full-width, 26 px clock layer is an estimate. Same gap as Stories 1.6, 1.7, 2.1, and 3.1.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-2-repeat-the-alert-until-select-is-pressed.md`
+  summary: Decide whether Select should also dismiss a repeating alert while the menu or Settings window is on top.
+  evidence: Owner decision 2A (2026-11-03) limits dismissal to the session view, so an alert that starts while a menu is open keeps vibrating until the owner backs out, or until the 2-minute cap. Revisit if that proves annoying in use.

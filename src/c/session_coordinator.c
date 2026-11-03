@@ -1,5 +1,6 @@
 #include "session_coordinator.h"
 
+#include "haptic_alert.h"
 #include "haptic_settings.h"
 
 #include <limits.h>
@@ -105,7 +106,11 @@ static void prv_request_haptic(void) {
   APP_LOG(APP_LOG_LEVEL_INFO, "HAPTIC_REQUEST lc=%d phase=%d gen=%lu pattern=%d",
           (int)s_record.lifecycle, (int)s_record.phase, (unsigned long)s_record.generation,
           (int)pattern);
+  haptic_alert_stop(); /* a newer request supersedes any repeating alert */
   haptic_settings_vibrate(pattern);
+  if (pattern == HAPTIC_PATTERN_UNTIL_SELECT) {
+    haptic_alert_start();
+  }
 }
 
 static bool prv_next_generation(uint32_t current, uint32_t *next) {
@@ -535,6 +540,7 @@ static void prv_stop(void) {
     return;
   }
   s_record = candidate;
+  haptic_alert_stop();
   if (old_id >= 0) {
     wakeup_cancel(old_id);
   }
@@ -1006,6 +1012,7 @@ static bool prv_enqueue(SessionEvent event) {
 }
 
 void session_coordinator_init(void) {
+  haptic_alert_stop();
   memset(&s_record, 0, sizeof(s_record));
   s_record.generation = 1;
   s_record.wakeup_id = (WakeupId)-1;
@@ -1027,6 +1034,7 @@ void session_coordinator_init(void) {
 }
 
 void session_coordinator_deinit(void) {
+  haptic_alert_stop();
   if (s_drain_timer) {
     app_timer_cancel(s_drain_timer);
     s_drain_timer = NULL;
@@ -1054,6 +1062,9 @@ void session_coordinator_change_timed_pause(bool longer) {
 }
 
 bool session_coordinator_middle_control(void) {
+  if (haptic_alert_dismiss()) {
+    return true;
+  }
   if (s_record.lifecycle != SESSION_RUNNING && s_record.lifecycle != SESSION_PAUSED &&
       s_record.lifecycle != SESSION_TIMED_PAUSED) {
     return false;

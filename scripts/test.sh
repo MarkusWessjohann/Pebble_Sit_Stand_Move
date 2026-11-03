@@ -7,6 +7,7 @@ trap 'rm -rf "$out"' EXIT
 
 cc -std=c99 -Wall -Wextra -Werror -I"$root/tests/pebble-stubs" -I"$root/src/c" \
   "$root/src/c/session_coordinator.c" "$root/src/c/session_store.c" "$root/src/c/haptic_settings.c" \
+  "$root/src/c/haptic_alert.c" \
   "$root/tests/session_coordinator_test.c" -o "$out/session_coordinator_test"
 "$out/session_coordinator_test"
 

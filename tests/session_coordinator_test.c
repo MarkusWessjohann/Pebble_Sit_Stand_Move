@@ -1,5 +1,6 @@
 #define _POSIX_C_SOURCE 200112L
 #include "session_coordinator.h"
+#include "haptic_alert.h"
 #include "haptic_settings.h"
 
 #include <assert.h>
@@ -23,6 +24,7 @@ static uint8_t s_haptic_persisted[64];
 static int s_haptic_persisted_size;
 static int s_write_attempts;
 static struct AppTimer s_timer;
+static struct AppTimer s_alert_timer;
 static WakeupHandler s_wakeup_handler;
 static WakeupId s_next_wakeup_id;
 static int s_launch_reason;
@@ -43,6 +45,9 @@ WakeupId fake_last_scheduled_id;
 time_t fake_last_scheduled_deadline;
 int fake_haptic_count;
 int fake_haptic_pattern = -1;
+int fake_vibes_cancel_count;
+uint32_t fake_last_alert_timeout_ms;
+bool fake_fail_alert_timer;
 char fake_log[4096];
 
 time_t fake_time(time_t *result) {
@@ -136,9 +141,10 @@ void fake_app_log(const char *format, ...) {
 }
 
 static bool s_vibe_is_preview;
+static bool s_vibe_is_repeat;
 
 static void prv_fake_vibe(int pattern) {
-  if (!s_vibe_is_preview) {
+  if (!s_vibe_is_preview && !s_vibe_is_repeat) {
     SessionRecord stored;
     bool found;
     assert(session_store_load(&stored, &found) && found);
@@ -160,6 +166,10 @@ void vibes_double_pulse(void) {
   prv_fake_vibe(HAPTIC_PATTERN_DOUBLE);
 }
 
+void vibes_cancel(void) {
+  ++fake_vibes_cancel_count;
+}
+
 void wakeup_service_subscribe(WakeupHandler handler) {
   s_wakeup_handler = handler;
 }
@@ -178,11 +188,17 @@ int launch_reason(void) {
 }
 
 AppTimer *app_timer_register(uint32_t timeout_ms, AppTimerCallback callback, void *context) {
-  (void)timeout_ms;
-  s_timer.callback = callback;
-  s_timer.context = context;
-  s_timer.pending = true;
-  return &s_timer;
+  struct AppTimer *slot = timeout_ms >= 1000 ? &s_alert_timer : &s_timer;
+  if (slot == &s_alert_timer) {
+    if (fake_fail_alert_timer) {
+      return NULL;
+    }
+    fake_last_alert_timeout_ms = timeout_ms;
+  }
+  slot->callback = callback;
+  slot->context = context;
+  slot->pending = true;
+  return slot;
 }
 
 void app_timer_cancel(AppTimer *timer) {
@@ -200,6 +216,19 @@ void fake_run_timers(void) {
   }
 }
 
+bool fake_alert_tick(void) {
+  if (!s_alert_timer.pending) {
+    return false;
+  }
+  AppTimerCallback callback = s_alert_timer.callback;
+  void *context = s_alert_timer.context;
+  s_alert_timer.pending = false;
+  s_vibe_is_repeat = true;
+  callback(context);
+  s_vibe_is_repeat = false;
+  return true;
+}
+
 void fake_deliver_wakeup(WakeupId id, int32_t cookie) {
   assert(s_wakeup_handler);
   s_wakeup_handler(id, cookie);
@@ -207,6 +236,7 @@ void fake_deliver_wakeup(WakeupId id, int32_t cookie) {
 }
 
 void fake_reset(void) {
+  haptic_alert_stop(); /* the alert's volatile state must not leak between tests */
   setenv("TZ", "UTC", 1);
   tzset();
   memset(s_persisted, 0, sizeof(s_persisted));
@@ -215,6 +245,10 @@ void fake_reset(void) {
   s_haptic_persisted_size = 0;
   s_write_attempts = 0;
   memset(&s_timer, 0, sizeof(s_timer));
+  memset(&s_alert_timer, 0, sizeof(s_alert_timer));
+  fake_vibes_cancel_count = 0;
+  fake_last_alert_timeout_ms = 0;
+  fake_fail_alert_timer = false;
   s_wakeup_handler = NULL;
   s_next_wakeup_id = 1;
   s_launch_reason = 0;
@@ -3185,7 +3219,7 @@ static void test_haptic_default_is_short_and_bad_values_fall_back(void) {
   assert(strstr(fake_log, "HAPTIC_REQUEST lc=1 phase=2 gen="));
   assert(strstr(fake_log, " pattern=0\n"));
 
-  const uint8_t out_of_range[] = { 3 };
+  const uint8_t out_of_range[] = { HAPTIC_PATTERN_COUNT };
   const uint8_t wrong_size[] = { 1, 1 };
   const uint8_t max_byte[] = { 255 };
   prv_store_haptic_bytes(out_of_range, sizeof(out_of_range));
@@ -3281,7 +3315,7 @@ static void test_haptic_setting_save_failure_keeps_stored_choice(void) {
   assert(!haptic_settings_set(HAPTIC_PATTERN_DOUBLE));
   fake_fail_write = false;
   assert(haptic_settings_get() == HAPTIC_PATTERN_LONG);
-  assert(!haptic_settings_set((HapticPattern)3));
+  assert(!haptic_settings_set(HAPTIC_PATTERN_COUNT));
   assert(haptic_settings_get() == HAPTIC_PATTERN_LONG);
 
   /* Choosing a row with a failing save: no preview, window stays open (returns false). */
@@ -3301,12 +3335,309 @@ static void test_haptic_setting_save_failure_keeps_stored_choice(void) {
   assert(strstr(fake_log, "HAPTIC_REQUEST") == NULL);
 }
 
+static void prv_start_until_select_alert(void) {
+  fake_reset();
+  assert(haptic_settings_set(HAPTIC_PATTERN_UNTIL_SELECT));
+  prv_start_session();
+  session_coordinator_skip();
+  fake_run_timers();
+}
+
+static int prv_run_alert_ticks(int max) {
+  int ticks = 0;
+  while (ticks < max && fake_alert_tick()) {
+    ++ticks;
+  }
+  return ticks;
+}
+
+static void test_until_select_settings_row_and_preview(void) {
+  fake_reset();
+  assert(HAPTIC_PATTERN_COUNT == 4);
+  assert(haptic_settings_get() == HAPTIC_PATTERN_SHORT);
+  /* Choosing it saves, plays exactly one short preview, and starts no repeat. */
+  s_vibe_is_preview = true;
+  assert(haptic_settings_choose(HAPTIC_PATTERN_UNTIL_SELECT));
+  s_vibe_is_preview = false;
+  assert(haptic_settings_get() == HAPTIC_PATTERN_UNTIL_SELECT);
+  assert(fake_haptic_count == 1 && fake_haptic_pattern == HAPTIC_PATTERN_SHORT);
+  assert(!haptic_alert_active());
+  assert(!fake_alert_tick());
+  /* A failed save: no preview, no alert, stored choice unchanged. */
+  fake_fail_write = true;
+  s_vibe_is_preview = true;
+  assert(!haptic_settings_choose(HAPTIC_PATTERN_LONG));
+  s_vibe_is_preview = false;
+  fake_fail_write = false;
+  assert(fake_haptic_count == 1);
+  assert(haptic_settings_get() == HAPTIC_PATTERN_UNTIL_SELECT);
+}
+
+static void test_until_select_marker_first_then_repeats_write_nothing(void) {
+  prv_start_until_select_alert();
+  /* The first vibration ran the marker assertion; the marker is persisted and the alert is on. */
+  assert(fake_haptic_count == 1 && fake_haptic_pattern == HAPTIC_PATTERN_SHORT);
+  SessionRecord stored;
+  bool found;
+  assert(session_store_load(&stored, &found) && found);
+  assert(stored.haptic_generation == stored.generation);
+  assert(haptic_alert_active());
+  assert(fake_last_alert_timeout_ms == 2000);
+  int writes = s_write_attempts;
+  int schedules = fake_schedule_count;
+  SessionView before = prv_view();
+  fake_last_alert_timeout_ms = 0;
+  assert(fake_alert_tick());
+  assert(fake_last_alert_timeout_ms == 2000);
+  assert(fake_alert_tick());
+  assert(fake_alert_tick());
+  assert(fake_haptic_count == 4);
+  /* Every repeat is a short pulse, whichever pulse the other patterns use. */
+  assert(fake_haptic_pattern == HAPTIC_PATTERN_SHORT);
+  assert(s_write_attempts == writes && fake_schedule_count == schedules);
+  SessionView after = prv_view();
+  assert(after.record.generation == before.record.generation);
+  assert(after.record.lifecycle == before.record.lifecycle);
+  assert(haptic_alert_active());
+  /* A failing store never makes repeats retry or write. */
+  fake_fail_write = true;
+  assert(fake_alert_tick());
+  assert(s_write_attempts == writes);
+  fake_fail_write = false;
+}
+
+static void test_until_select_dismiss_changes_nothing(void) {
+  prv_start_until_select_alert();
+  assert(fake_alert_tick());
+  SessionView before = prv_view();
+  int writes = s_write_attempts;
+  int schedules = fake_schedule_count;
+  int cancels = fake_cancel_count;
+  int haptics = fake_haptic_count;
+  assert(session_coordinator_middle_control());
+  fake_run_timers();
+  assert(!haptic_alert_active());
+  assert(fake_vibes_cancel_count == 1);
+  SessionView after = prv_view();
+  assert(after.record.lifecycle == before.record.lifecycle);
+  assert(after.record.phase == before.record.phase);
+  assert(after.record.generation == before.record.generation);
+  assert(after.record.deadline_utc == before.record.deadline_utc);
+  assert(after.record.wakeup_id == before.record.wakeup_id);
+  assert(after.error == before.error);
+  assert(s_write_attempts == writes && fake_schedule_count == schedules);
+  assert(fake_cancel_count == cancels && fake_haptic_count == haptics);
+  assert(!fake_alert_tick());
+  /* The next Select is the ordinary middle control again (running: timed pause). */
+  assert(session_coordinator_middle_control());
+  fake_run_timers();
+  assert(prv_view().record.lifecycle == SESSION_TIMED_PAUSED);
+}
+
+static void test_until_select_other_buttons_keep_alert_and_function(void) {
+  prv_start_until_select_alert();
+  uint32_t generation = prv_view().record.generation;
+  assert(session_coordinator_top_control());
+  fake_run_timers();
+  assert(prv_view().record.generation > generation);
+  assert(haptic_alert_active());
+  assert(session_coordinator_bottom_control());
+  fake_run_timers();
+  assert(haptic_alert_active());
+  assert(fake_alert_tick() && haptic_alert_active());
+}
+
+static void test_until_select_cap_stops_after_two_minutes(void) {
+  prv_start_until_select_alert();
+  assert(prv_run_alert_ticks(1000) == 60);
+  assert(!haptic_alert_active());
+  assert(!fake_alert_tick());
+  /* First vibration plus 59 repeats, spaced 2 s apart: the last one lands before 120 s. */
+  assert(fake_haptic_count == 60);
+  assert(fake_vibes_cancel_count == 1);
+  assert(prv_view().error == SESSION_ERROR_NONE);
+}
+
+static void test_until_select_timer_failure_never_leaves_a_stuck_alert(void) {
+  /* Failed first arm: no alert, and the next Select is not consumed as a dismiss. */
+  fake_reset();
+  assert(haptic_settings_set(HAPTIC_PATTERN_UNTIL_SELECT));
+  prv_start_session();
+  fake_fail_alert_timer = true;
+  session_coordinator_skip();
+  fake_run_timers();
+  assert(fake_haptic_count == 1);
+  assert(!haptic_alert_active());
+  assert(session_coordinator_middle_control());
+  fake_run_timers();
+  assert(prv_view().record.lifecycle == SESSION_TIMED_PAUSED);
+  assert(fake_vibes_cancel_count == 0);
+
+  /* Failed re-arm mid-run: the alert ends. */
+  prv_start_until_select_alert();
+  assert(fake_alert_tick() && haptic_alert_active());
+  fake_fail_alert_timer = true;
+  assert(fake_alert_tick());
+  assert(!haptic_alert_active());
+  assert(!fake_alert_tick());
+}
+
+static void test_until_select_stop_ends_alert(void) {
+  prv_start_until_select_alert();
+  assert(fake_alert_tick());
+  session_coordinator_stop();
+  fake_run_timers();
+  assert(prv_view().record.lifecycle == SESSION_INACTIVE);
+  assert(!haptic_alert_active());
+  assert(!fake_alert_tick());
+  assert(fake_vibes_cancel_count == 1);
+  /* A Stop that fails to commit leaves the alert running. */
+  prv_start_until_select_alert();
+  fake_fail_write = true;
+  session_coordinator_stop();
+  fake_run_timers();
+  fake_fail_write = false;
+  assert(prv_view().record.lifecycle == SESSION_RUNNING);
+  assert(haptic_alert_active());
+}
+
+static void test_until_select_supersession_leaves_one_alert(void) {
+  prv_start_until_select_alert();
+  assert(prv_run_alert_ticks(10) == 10);
+  int haptics = fake_haptic_count;
+  session_coordinator_select_menu_row(1);
+  fake_run_timers();
+  assert(fake_haptic_count == haptics + 1);
+  assert(haptic_alert_active());
+  /* The cap restarted with the newer alert: a full 60 ticks, not the 50 left of the old one. */
+  assert(prv_run_alert_ticks(1000) == 60);
+  assert(!haptic_alert_active());
+
+  /* Switching to Short mid-alert: the newer request replaces it with a single pulse. */
+  prv_start_until_select_alert();
+  assert(haptic_settings_set(HAPTIC_PATTERN_SHORT));
+  session_coordinator_select_menu_row(1);
+  fake_run_timers();
+  assert(!haptic_alert_active());
+  assert(!fake_alert_tick());
+}
+
+static void test_until_select_is_volatile_across_relaunch(void) {
+  prv_start_until_select_alert();
+  int haptics = fake_haptic_count;
+  session_coordinator_deinit();
+  assert(!haptic_alert_active());
+  session_coordinator_init();
+  fake_run_timers();
+  assert(!haptic_alert_active());
+  assert(!fake_alert_tick());
+  assert(fake_haptic_count == haptics);
+  assert(prv_view().record.lifecycle == SESSION_RUNNING);
+
+  /* init alone, with no deinit before it, also leaves no alert running. */
+  prv_start_until_select_alert();
+  assert(haptic_alert_active());
+  session_coordinator_init();
+  fake_run_timers();
+  assert(!haptic_alert_active());
+  assert(!fake_alert_tick());
+}
+
+static void test_until_select_overdue_recovery_starts_at_most_one_alert(void) {
+  fake_reset();
+  assert(haptic_settings_set(HAPTIC_PATTERN_UNTIL_SELECT));
+  prv_start_session();
+  SessionView view = prv_view();
+  session_coordinator_deinit();
+  fake_now = (time_t)view.record.deadline_utc + 5 * 60;
+  int haptics = fake_haptic_count;
+  session_coordinator_init();
+  fake_run_timers();
+  assert(prv_view().record.lifecycle == SESSION_RUNNING);
+  assert(fake_haptic_count == haptics + 1);
+  assert(haptic_alert_active());
+  assert(prv_run_alert_ticks(1000) == 60);
+  assert(!haptic_alert_active());
+}
+
+static void test_until_select_pause_does_not_end_alert(void) {
+  prv_start_until_select_alert();
+  session_coordinator_pause();
+  fake_run_timers();
+  assert(prv_view().record.lifecycle == SESSION_PAUSED);
+  assert(haptic_alert_active());
+  session_coordinator_resume();
+  fake_run_timers();
+  assert(haptic_alert_active());
+  session_coordinator_timed_pause(10 * 60);
+  fake_run_timers();
+  assert(prv_view().record.lifecycle == SESSION_TIMED_PAUSED);
+  assert(haptic_alert_active());
+  /* Select with the alert up dismisses it, even in a timed pause, and does not resume. */
+  assert(session_coordinator_middle_control());
+  fake_run_timers();
+  assert(!haptic_alert_active());
+  assert(prv_view().record.lifecycle == SESSION_TIMED_PAUSED);
+}
+
+static void test_until_select_menu_row_pick_leaves_alert_running(void) {
+  prv_start_until_select_alert();
+  /* The menu window handles Select itself (select_menu_row), never middle_control. */
+  session_coordinator_select_menu_row(0); /* Pause */
+  fake_run_timers();
+  assert(prv_view().record.lifecycle == SESSION_PAUSED);
+  assert(haptic_alert_active());
+}
+
+static void test_idle_select_without_alert_is_unchanged(void) {
+  fake_reset();
+  session_coordinator_init();
+  fake_run_timers();
+  assert(!session_coordinator_middle_control()); /* inactive: the UI opens the menu */
+  session_coordinator_start();
+  fake_run_timers();
+  assert(session_coordinator_middle_control());
+  fake_run_timers();
+  assert(prv_view().record.lifecycle == SESSION_TIMED_PAUSED);
+  assert(fake_vibes_cancel_count == 0);
+}
+
+static void test_other_patterns_never_repeat(void) {
+  const HapticPattern patterns[] = { HAPTIC_PATTERN_SHORT, HAPTIC_PATTERN_LONG,
+                                     HAPTIC_PATTERN_DOUBLE };
+  for (size_t i = 0; i < sizeof(patterns) / sizeof(patterns[0]); ++i) {
+    fake_reset();
+    assert(haptic_settings_set(patterns[i]));
+    prv_start_session();
+    session_coordinator_skip();
+    fake_run_timers();
+    assert(fake_haptic_count == 1);
+    assert(!haptic_alert_active());
+    assert(!fake_alert_tick());
+    assert(fake_vibes_cancel_count == 0);
+  }
+}
+
 int main(void) {
   test_start_and_stop();
   test_haptic_default_is_short_and_bad_values_fall_back();
   test_haptic_chosen_pattern_applies_to_every_request();
   test_haptic_pattern_is_silent_for_other_commands_and_persists();
   test_haptic_setting_save_failure_keeps_stored_choice();
+  test_until_select_settings_row_and_preview();
+  test_until_select_marker_first_then_repeats_write_nothing();
+  test_until_select_dismiss_changes_nothing();
+  test_until_select_other_buttons_keep_alert_and_function();
+  test_until_select_cap_stops_after_two_minutes();
+  test_until_select_timer_failure_never_leaves_a_stuck_alert();
+  test_until_select_stop_ends_alert();
+  test_until_select_supersession_leaves_one_alert();
+  test_until_select_is_volatile_across_relaunch();
+  test_until_select_overdue_recovery_starts_at_most_one_alert();
+  test_until_select_pause_does_not_end_alert();
+  test_until_select_menu_row_pick_leaves_alert_running();
+  test_idle_select_without_alert_is_unchanged();
+  test_other_patterns_never_repeat();
   test_stale_callback_is_ignored();
   test_log_lines_report_callbacks_and_haptics();
   test_clock_schedule_and_storage_failures();

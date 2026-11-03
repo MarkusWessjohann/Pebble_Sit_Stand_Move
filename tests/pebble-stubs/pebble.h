@@ -28,6 +28,7 @@ void app_timer_cancel(AppTimer *timer);
 void vibes_short_pulse(void);
 void vibes_long_pulse(void);
 void vibes_double_pulse(void);
+void vibes_cancel(void);
 
 enum { APP_LOG_LEVEL_INFO = 100 };
 void fake_app_log(const char *format, ...) __attribute__((format(printf, 1, 2)));
@@ -39,6 +40,9 @@ extern char fake_log[4096];
 
 void fake_reset(void);
 void fake_run_timers(void);
+/* Fires the pending repeating-alert timer (registered with timeout >= 1000 ms) once. Returns
+ * whether one was pending. */
+bool fake_alert_tick(void);
 void fake_deliver_wakeup(WakeupId id, int32_t cookie);
 
 extern time_t fake_now;
@@ -54,3 +58,6 @@ extern WakeupId fake_last_scheduled_id;
 extern time_t fake_last_scheduled_deadline;
 extern int fake_haptic_count;
 extern int fake_haptic_pattern;
+extern int fake_vibes_cancel_count;
+extern uint32_t fake_last_alert_timeout_ms;
+extern bool fake_fail_alert_timer;
