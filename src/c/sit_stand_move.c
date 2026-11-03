@@ -112,7 +112,7 @@ static void prv_render(void) {
     if (view.record.lifecycle == SESSION_RUNNING) {
       snprintf(s_label_text[0], sizeof(s_label_text[0]), "+5");
       snprintf(s_label_text[1], sizeof(s_label_text[1]), "II");
-      snprintf(s_label_text[2], sizeof(s_label_text[2]), "+10");
+      snprintf(s_label_text[2], sizeof(s_label_text[2]), "-5");
     }
     if (view.record.lifecycle == SESSION_PAUSED) {
       snprintf(s_label_text[1], sizeof(s_label_text[1]), "PAUSED");

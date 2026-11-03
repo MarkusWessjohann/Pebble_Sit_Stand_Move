@@ -10,7 +10,8 @@ enum {
   SESSION_PAUSE_10_SECONDS = 10 * 60,
   SESSION_PAUSE_30_SECONDS = 30 * 60,
   SESSION_EXTEND_TOP_SECONDS = 5 * 60,
-  SESSION_EXTEND_BOTTOM_SECONDS = 10 * 60,
+  SESSION_EXTEND_BOTTOM_SECONDS = -5 * 60,
+  SESSION_SUBTRACT_FLOOR_SECONDS = 60,
   SESSION_QUEUE_SIZE = 8,
 };
 
@@ -455,7 +456,7 @@ static void prv_skip(void) {
 
 static void prv_extend(int32_t seconds) {
   time_t now;
-  if (seconds <= 0 || s_record.lifecycle != SESSION_RUNNING) {
+  if (seconds == 0 || s_record.lifecycle != SESSION_RUNNING) {
     return;
   }
   if (!prv_read_utc(&now)) {
@@ -465,14 +466,25 @@ static void prv_extend(int32_t seconds) {
   if (!prv_reconcile_before_command(now) || s_record.lifecycle != SESSION_RUNNING) {
     return;
   }
-  if (s_record.deadline_utc + seconds > INT32_MAX) {
+  int64_t new_deadline = s_record.deadline_utc + seconds;
+  if (new_deadline > INT32_MAX) {
     s_error = SESSION_ERROR_CLOCK;
     return;
+  }
+  if (seconds < 0) {
+    /* Subtract never ends the phase: with 5 minutes or less left, clamp to the floor, or
+     * change nothing if that would not move the deadline earlier. */
+    if (s_record.deadline_utc - (int64_t)now <= -seconds) {
+      new_deadline = (int64_t)now + SESSION_SUBTRACT_FLOOR_SECONDS;
+    }
+    if (new_deadline >= s_record.deadline_utc) {
+      return;
+    }
   }
 
   SessionRecord candidate = s_record;
   WakeupId old_id = candidate.wakeup_id;
-  candidate.deadline_utc += seconds;
+  candidate.deadline_utc = new_deadline;
   prv_reset_tally_day(&candidate, prv_local_day(now));
   if (!prv_next_generation(candidate.generation, &candidate.generation)) {
     s_error = SESSION_ERROR_STORAGE;
