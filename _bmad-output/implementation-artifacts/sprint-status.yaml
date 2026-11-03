@@ -43,7 +43,7 @@ development_status:
   1-3-follow-the-cycle-and-recover-from-missed-deadlines: done
   1-4-manually-pause-and-resume-a-session: done
   1-5-take-and-end-a-timed-pause: done
-  1-6-skip-the-active-phase: review
+  1-6-skip-the-active-phase: done
   1-7-extend-the-active-phase: backlog
   1-8-verify-the-finished-app-on-pebble-time-2-before-release: backlog
   epic-1-retrospective: optional
