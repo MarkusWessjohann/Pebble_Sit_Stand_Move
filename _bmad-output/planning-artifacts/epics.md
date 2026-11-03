@@ -2,6 +2,7 @@
 status: final
 updated: 2026-11-03
 epic3Pass: step-04-final-validation  # Epic 3 (settings): validated and complete
+epic4Pass: step-04-final-validation  # Epic 4 (phase lengths): validated and complete
 stepsCompleted:
   - step-01-validate-prerequisites
   - step-02-design-epics
@@ -49,6 +50,16 @@ FR10: The chosen pattern applies to every haptic request: automatic phase transi
 
 FR11: With **Until Select**, the haptic repeats until the owner presses Select, then stops. The Select press that dismisses the alert is consumed and does not trigger the middle-control action (it must not start a 30-minute timed pause or resume). The repeat also stops on a safety cap (2 minutes; owner decision 2026-11-03), on Stop, when a newer haptic-requesting transition supersedes it, and when the app exits. Stopping is always silent.
 
+**Epic 4 additions (2026-11-03, owner-requested configurable phase lengths):**
+
+FR12: Settings lets the owner set the length of each phase: **Sit**, **Stand**, and **Move**. Each length is chosen from 5 to 60 minutes in steps of 5 minutes. The defaults stay 45 (Sit), 10 (Stand), and 5 (Move), so an owner who never opens the setting sees today's behavior. The phase keeps the name `Move` (owner decision: not renamed to `Walk`). Where FR1, FR2, FR6, and FR8 state 45/10/5 minutes, those are the default lengths; with changed lengths the same rules apply to the configured values.
+
+FR13: The three lengths persist across app restarts and independently of the session record, so Stop, Start, and session-record recovery never reset them. A missing, corrupt, or out-of-range stored value falls back to that phase's default without a visible error.
+
+FR14: A changed length applies only to phases that start after the change: an automatic phase transition, Skip, a new Start, and the full-length rebase on overdue recovery. The running phase keeps its deadline; a paused or timed-paused phase keeps its saved remaining time; no Wakeup is rescheduled because of a settings change. Timed-pause choices (5, 10, 30 minutes) and extension amounts are unchanged. The daily tally keeps counting naturally completed phases regardless of their configured length (owner decision); skipped and in-progress phases remain excluded.
+
+FR15: Settings offers a **Reset** entry that restores the three lengths to 45/10/5 in one action. It does not change the haptic pattern.
+
 ### NonFunctional Requirements
 
 NFR1: The application targets Pebble Time 2 and must be operable from the watch without phone interaction during a session. Timing must continue after the app leaves the foreground; operation after explicit app termination is not required.
@@ -77,6 +88,14 @@ NFR10: A haptic request is still a single committed attempt per transition. The 
 
 NFR11: The haptic setting lives in its own small persistent-storage key. It must not change the versioned session record schema, and a missing, corrupt, or unsupported value falls back to **Short** without surfacing an error.
 
+**Epic 4 amendments (2026-11-03):**
+
+NFR7 (amended): The exclusion of "configurable default phase lengths" no longer applies; the three phase lengths are owner-configurable (FR12). Every other NFR7 exclusion stands: no sensing, analytics, schedules, cloud, or required phone companion.
+
+NFR12: The phase lengths live in their own small persistent-storage key, separate from the haptic setting key and from `SESSION_STORE_KEY`. They must not change the versioned session record schema. A missing, wrong-size, or out-of-range value falls back to the default for that phase without surfacing an error.
+
+NFR13: Phase timing stays owned by the coordinator. The coordinator reads the configured length once when a phase starts, through its single duration lookup; the UI only writes the setting and never computes deadlines or touches a running phase. Deadline, Wakeup, generation, haptic-attempt, and recovery rules (NFR2, NFR4, NFR5, NFR10) are unchanged, and the existing 45/10/5 behavior is preserved when no setting is saved.
+
 ### Additional Requirements
 
 - The architecture specifies one native Pebble C watch app using an event-driven state machine. The Session Coordinator is the sole owner and mutation boundary for lifecycle state, active phase, deadlines, persistence, and Wakeup scheduling; the UI renders coordinator state and dispatches commands.
@@ -91,6 +110,7 @@ NFR11: The haptic setting lives in its own small persistent-storage key. It must
 - The product brief confirms watch-first use, the 45/10/5 schedule, manual controls, timed-pause behavior, deterministic recovery, UTC authority, and the out-of-scope items reflected above. Where brief wording differs in detail, the final PRD, Architecture, and UX contract provide the implementation-level requirements.
 - Product/UX decisions confirmed: native menu order is Start when inactive and Pause/Resume, Skip, Stop while active; phase icons are monochrome chair/standing-person/moving-person paired with text; timed-pause alternatives use shorter-on-top and longer-on-bottom (30-minute entry shows 5/10); daily tally uses local calendar day, persists across app restarts, aggregates across sessions, and resets at local midnight.
 - Epic 3 constraints from the code: `prv_request_haptic()` in `src/c/session_coordinator.c` is the single haptic call site (currently `vibes_short_pulse()`), and all haptic requests flow through it. Select is also the middle control (`session_coordinator_middle_control()`), so the dismiss press must be intercepted before it. The setting needs its own persist key beside `SESSION_STORE_KEY`.
+- Epic 4 constraints from the code: `prv_duration()` in `src/c/session_coordinator.c` hardcodes 45/10/5 minutes and is the single lookup used by the cycle advance, Skip, Start, and overdue recovery. The lengths need their own persist key beside `HAPTIC_SETTINGS_KEY` in a settings module like `haptic_settings.c`. The host test build (`scripts/test.sh`) compiles the coordinator against Pebble API stubs, so the new setting must be readable through the stubs. The existing Settings window (`prv_settings_*` in `src/c/sit_stand_move.c`) is a single MenuLayer of four haptic rows and must be extended without breaking Story 3.1/3.2 behavior.
 - Physical-device decisions to verify with the finished app before release in Story 1.8: Pebble Wakeup delivery after leaving the app, haptic delivery, app foregrounding, and measurable phase-transition tolerance on the target firmware.
 
 ### UX Design Requirements
@@ -139,6 +159,14 @@ UX-DR19: The Settings window lists four rows in this order: `Short`, `Long`, `Do
 
 UX-DR20: While an Until Select alert is repeating, the session view shows a concise text cue (for example `Select to stop`) that does not overlap or clip the countdown, icon, phase name, tally, or button labels. Pressing Select stops the alert and removes the cue. Other buttons do not dismiss it and keep their normal functions.
 
+**Epic 4 additions (2026-11-03, owner-requested configurable phase lengths; extend UX-DR18/UX-DR19, no new surface beyond the Settings window):**
+
+UX-DR21: The Settings window shows the three phase lengths and the Reset entry in addition to the four haptic rows, in the same native menu window and without a new surface. Order: the four haptic rows as today, then `Sit`, `Stand`, `Move`, `Reset`. Each length row shows its current value as readable text (for example `Sit 45 min`), never color alone. Selecting a haptic row behaves as in UX-DR19.
+
+UX-DR22: Selecting a length row steps its value up by 5 minutes and wraps from 60 back to 5 (owner-confirmed edit gesture, 2026-11-03). The new value is saved and the row text updates in place; the window stays open so several lengths can be set in one visit. Back leaves the window with the saved values. Selecting `Reset` restores 45/10/5 and updates the rows. A failed save leaves the previous value shown and stored.
+
+UX-DR23: The longest Settings rows (for example `Stand 60 min`) fit the Pebble Time 2 display-safe area without clipping, and the window scrolls natively. Verify on the emulator and, if available, Pebble Time 2, and record emulator evidence separately.
+
 ### FR Coverage Map
 
 FR1: Epic 1 - Start and stop a session from the watch.
@@ -168,6 +196,17 @@ UX-DR18: Epic 3 - Settings row in the native menu, all states.
 UX-DR19: Epic 3 - Settings window with a text-marked current choice.
 UX-DR20: Epic 3 - Select-to-stop cue while an Until Select alert repeats.
 
+Epic 4 covers the new and amended requirements:
+
+FR12: Epic 4 - Story 4.1 - Sit, Stand, and Move lengths (5 to 60 min, step 5) in Settings.
+FR13: Epic 4 - Story 4.1 - Lengths persist separately from the session record; invalid values fall back to the defaults.
+FR14: Epic 4 - Story 4.1 - Changed lengths apply only to phases that start later; running and paused phases, Wakeups, timed-pause choices, and Extend are unchanged; tally unchanged.
+FR15: Epic 4 - Story 4.2 - Reset restores 45/10/5 and leaves the haptic pattern alone.
+NFR7 (amended), NFR12, NFR13: Epic 4 - Story 4.1 - Lengths are configurable; own persist key; the coordinator reads the length when a phase starts.
+UX-DR21: Epic 4 - Stories 4.1 and 4.2 - Length rows and the Reset row in the Settings window.
+UX-DR22: Epic 4 - Stories 4.1 and 4.2 - Select steps a length up by 5 with wrap; Reset restores the defaults.
+UX-DR23: Epic 4 - Story 4.1 - Longest rows fit without clipping.
+
 ## Epic List
 
 ### Epic 1: Run and control a sit–stand–move session from the watch
@@ -187,6 +226,12 @@ The owner can read the current time and the daily tally more easily, and can see
 The owner can open Settings from the native watch menu and choose the haptic pattern: Short, Long, Double, or Until Select. Phase transitions, Skip, and timed-pause end use the chosen pattern; with Until Select the alert repeats until the owner presses Select, with a safety cap. The choice persists across restarts and Stop. Session timing, scheduling, recovery, and the Epic 1 and 2 behavior are unchanged apart from the haptic call using the chosen pattern. It builds on Epics 1 and 2 and does not reopen Story 1.8.
 
 **FRs covered:** FR9, FR10, FR11. Also covers NFR6 (amended), NFR10, NFR11, UX-DR18–UX-DR20.
+
+### Epic 4: Choose how long each phase lasts
+
+The owner can open Settings and set the length of Sit, Stand, and Move (5 to 60 minutes in steps of 5), or reset them to 45/10/5. A new length applies to phases that start afterwards; the running phase, pauses, Wakeups, timed-pause choices, and Extend are unchanged, and the daily tally keeps counting naturally completed phases. The lengths persist across restarts and Stop. It builds on Epics 1 to 3 and does not reopen Story 1.8.
+
+**FRs covered:** FR12, FR13, FR14, FR15. Also covers NFR7 (amended), NFR12, NFR13, UX-DR21–UX-DR23.
 
 ## Epic 1: Run and control a sit–stand–move session from the watch
 
@@ -771,3 +816,135 @@ So that I don't miss a phase change when the watch is not on my wrist or I am bu
 **Then** each case (dismiss, cap, supersede, Stop, relaunch) is recorded with its source; emulator results are not presented as physical-device results, and any unverified case is stated.
 
 `DESIGN.md` and `EXPERIENCE.md` are updated in the same change to describe the alert cue and Select behavior.
+
+## Epic 4: Choose how long each phase lasts
+
+The owner can open Settings and set the length of Sit, Stand, and Move (5 to 60 minutes in steps of 5), or reset them to 45/10/5. A new length applies to phases that start afterwards; the running phase, pauses, Wakeups, timed-pause choices, and Extend are unchanged, and the daily tally keeps counting naturally completed phases. The lengths persist across restarts and Stop. It builds on Epics 1 to 3 and does not reopen Story 1.8.
+
+### Story 4.1: Set the length of Sit, Stand, and Move in Settings
+
+As the watch owner,
+I want to set how long Sit, Stand, and Move last in the Settings menu,
+So that the cycle fits my working day instead of the fixed 45/10/5.
+
+**Requirements:** FR12, FR13, FR14, NFR7 (amended), NFR12, NFR13, UX-DR21 (length rows), UX-DR22 (step and wrap), UX-DR23.
+
+**Dependencies:** Builds on Epics 1 to 3. Story 1.8 is closed by owner waiver and is not reopened. Physical-device checks on Pebble Time 2 are owner checks and do not block this story. Emulator evidence is recorded as emulator evidence.
+
+**Acceptance Criteria:**
+
+**Given** I open Settings in any lifecycle state (inactive, running, `PAUSED`, `BREAK`)
+**When** the window opens
+**Then** it lists the four haptic rows as before, followed by `Sit`, `Stand`, and `Move`, each showing its current value as text (for example `Sit 45 min`), and introduces no other new surface.
+
+**Given** no length has ever been saved
+**When** the app runs
+**Then** the lengths are 45, 10, and 5 minutes, and behavior is unchanged from today.
+
+**Given** I select a length row
+**When** I press Select
+**Then** its value rises by 5 minutes, wraps from 60 back to 5, is saved, and the row text shows the new value. The window stays open, no haptic preview plays, and Back leaves the window with the saved values.
+
+**Given** saving a value fails
+**When** I press Select on a length row
+**Then** the row keeps showing the previous value and the stored value is unchanged.
+
+**Given** I select a haptic row
+**When** I press Select
+**Then** it behaves as in Stories 3.1 and 3.2 (save, one preview, return), and the haptic rows are otherwise unchanged.
+
+**Given** the lengths are saved
+**When** I stop and start a session, or relaunch the app
+**Then** the lengths are still in effect and are not reset by Stop, Start, or session-record recovery.
+
+**Given** a stored value is missing, has the wrong size, is outside 5 to 60, or is not a multiple of 5
+**When** the app reads it
+**Then** that phase uses its default without a visible error, and the other phases keep their valid values.
+
+**Given** the lengths are stored
+**When** persistence is reviewed
+**Then** they use their own persist key, separate from the haptic key and from `SESSION_STORE_KEY`, and the versioned session record schema is unchanged.
+
+**Given** a phase starts (automatic transition, Skip, Start, or the rebase on overdue recovery)
+**When** the coordinator sets its deadline
+**Then** it reads that phase's configured length through `prv_duration()`, and the UI computes no deadlines.
+
+**Given** a phase is running and I change its length or another phase's length
+**When** the change is saved
+**Then** the running phase keeps its deadline and its Wakeup, nothing is rescheduled, and the new length applies the next time that phase starts.
+
+**Given** the session is `PAUSED` or `BREAK`
+**When** I change lengths and then resume
+**Then** the phase continues with its saved remaining time, and the timed-pause choices (5, 10, 30) and Extend are unchanged.
+
+**Given** a phase ends naturally, with a changed or the default length
+**When** the tally updates
+**Then** it counts as completed as before, and skipped or in-progress phases stay excluded.
+
+**Given** Settings is open while a deadline comes due
+**When** the transition is processed
+**Then** the coordinator handles it as before, with the chosen haptic pattern and the configured length of the new phase.
+
+**Given** the longest row (for example `Stand 60 min`) and all rows of the Settings window
+**When** the window is shown on the emulator
+**Then** no row is clipped or overlapped and the window scrolls natively.
+
+**Given** the change is built
+**When** the host tests run (`scripts/test.sh`)
+**Then** they cover the defaults, valid and invalid stored values, the length used at each phase transition and at Skip, the wrap from 60 to 5, and the unchanged running phase, and all existing tests still pass.
+
+**Given** the feature is checked on the emulator and, if available, on Pebble Time 2
+**When** evidence is recorded
+**Then** each result is recorded with its source, emulator results are not presented as physical-device results, and anything unverified is stated.
+
+`DESIGN.md` and `EXPERIENCE.md` are updated in the same change to add the length rows.
+
+### Story 4.2: Reset the phase lengths to 45/10/5
+
+As the watch owner,
+I want to reset all three phase lengths to their defaults in one action,
+So that I can get back to the standard 45/10/5 cycle without stepping each value around.
+
+**Requirements:** FR15, UX-DR21 (Reset row), UX-DR22 (Reset).
+
+**Dependencies:** Builds on Story 4.1 (the length rows and their own persist key). Story 1.8 is closed by owner waiver and is not reopened. Physical-device checks are owner checks. Emulator evidence is recorded as emulator evidence.
+
+**Acceptance Criteria:**
+
+**Given** I open Settings in any lifecycle state
+**When** the window opens
+**Then** `Reset` is the last row, after `Sit`, `Stand`, and `Move`, and the other rows are unchanged.
+
+**Given** the lengths are not 45/10/5
+**When** I select `Reset` and press Select
+**Then** Sit, Stand, and Move are saved as 45, 10, and 5 minutes, the three rows show the default values, and the window stays open.
+
+**Given** the lengths are already 45/10/5
+**When** I select `Reset`
+**Then** nothing changes and no error is shown.
+
+**Given** saving the default values fails
+**When** I select `Reset`
+**Then** the rows and the stored values still show the previous values, and no value is left half reset.
+
+**Given** I select `Reset`
+**When** the values are reset
+**Then** the chosen haptic pattern is unchanged and no haptic preview plays.
+
+**Given** a phase is running, or the session is `PAUSED` or `BREAK`
+**When** I select `Reset`
+**Then** the running phase keeps its deadline and its Wakeup, the pause keeps its remaining time, and the default lengths apply the next time each phase starts (as in Story 4.1).
+
+**Given** I selected `Reset` and then restart the app
+**When** it reads the lengths
+**Then** they are still 45/10/5, and Stop, Start, and recovery change nothing.
+
+**Given** the change is built
+**When** the host tests run (`scripts/test.sh`)
+**Then** they cover reset from changed values, reset at the defaults, a failed write leaving no half-reset state, and the unchanged haptic pattern, and all existing tests still pass.
+
+**Given** the feature is checked on the emulator and, if available, on Pebble Time 2
+**When** evidence is recorded
+**Then** each result is recorded with its source, emulator results are not presented as physical-device results, and anything unverified is stated.
+
+`DESIGN.md` and `EXPERIENCE.md` are updated in the same change to add the Reset row.
