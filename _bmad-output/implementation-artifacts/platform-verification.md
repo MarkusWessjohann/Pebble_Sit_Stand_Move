@@ -47,6 +47,8 @@ In the emulator harness at `ef33c2f`, press **Up**, then leave it normally so it
 
 Story 1.8 in `_bmad-output/planning-artifacts/epics.md` is the single source for the physical acceptance criteria; this report no longer copies them. Run it only after Stories 1.2–1.7 are complete, with the finished app, and record physical results separately from the toolchain and emulator evidence above. Physical checks do not block the start of Stories 1.2–1.7.
 
+The operator-run protocol and evidence template for Story 1.8 is `_bmad-output/implementation-artifacts/device-acceptance-1-8.md`. Record physical results there, not here.
+
 Open items carried from Story 1.1, to settle before Story 1.8 timing tests start:
 
 - A measurable timing tolerance and a repeat count, agreed with the owner. No value is invented here.

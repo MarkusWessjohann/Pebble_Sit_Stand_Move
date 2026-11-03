@@ -27,6 +27,12 @@ AppTimer *app_timer_register(uint32_t timeout_ms, AppTimerCallback callback, voi
 void app_timer_cancel(AppTimer *timer);
 void vibes_short_pulse(void);
 
+enum { APP_LOG_LEVEL_INFO = 100 };
+void fake_app_log(const char *format, ...) __attribute__((format(printf, 1, 2)));
+/* Host stub: formatted lines accumulate in fake_log, one per line, cleared by fake_reset(). */
+#define APP_LOG(level, ...) fake_app_log(__VA_ARGS__)
+extern char fake_log[4096];
+
 #define time fake_time
 
 void fake_reset(void);

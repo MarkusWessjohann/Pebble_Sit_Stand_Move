@@ -2,6 +2,7 @@
 #include "session_coordinator.h"
 
 #include <assert.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -37,6 +38,7 @@ WakeupId fake_last_cancelled_id;
 WakeupId fake_last_scheduled_id;
 time_t fake_last_scheduled_deadline;
 int fake_haptic_count;
+char fake_log[4096];
 
 time_t fake_time(time_t *result) {
   if (result) {
@@ -94,6 +96,20 @@ void wakeup_cancel(WakeupId id) {
 
 void wakeup_cancel_all(void) {
   ++fake_cancel_all_count;
+}
+
+void fake_app_log(const char *format, ...) {
+  size_t used = strlen(fake_log);
+  if (used + 2 >= sizeof(fake_log)) {
+    return;
+  }
+  va_list args;
+  va_start(args, format);
+  vsnprintf(fake_log + used, sizeof(fake_log) - used - 1, format, args);
+  va_end(args);
+  used = strlen(fake_log);
+  fake_log[used] = '\n';
+  fake_log[used + 1] = '\0';
 }
 
 void vibes_short_pulse(void) {
@@ -175,6 +191,7 @@ void fake_reset(void) {
   fake_last_scheduled_id = (WakeupId)-1;
   fake_last_scheduled_deadline = 0;
   fake_haptic_count = 0;
+  fake_log[0] = '\0';
 }
 
 static void prv_start_session(void) {
@@ -2927,9 +2944,63 @@ static void test_invalid_record_is_persisted_as_error_until_replaced(void) {
   assert(loaded && found);
 }
 
+static void test_log_lines_report_callbacks_and_haptics(void) {
+  fake_reset();
+  prv_start_session();
+  SessionView view = prv_view();
+  WakeupId id = view.record.wakeup_id;
+  int32_t gen = (int32_t)view.record.generation;
+  char want[160];
+
+  /* Stale: wrong generation. Delivery is logged, then the stale rejection with both ids. */
+  fake_log[0] = '\0';
+  fake_deliver_wakeup(id, gen + 1);
+  snprintf(want, sizeof(want), "WAKEUP_DELIVERED id=%ld gen=%ld\n", (long)id, (long)gen + 1);
+  assert(strstr(fake_log, want));
+  snprintf(want, sizeof(want), "WAKEUP result=stale lc=1 gen=%ld egen=%ld id=%ld eid=%ld\n",
+           (long)gen, (long)gen + 1, (long)id, (long)id);
+  assert(strstr(fake_log, want));
+  assert(!strstr(fake_log, "HAPTIC_REQUEST"));
+
+  /* Early: before the deadline. The reschedule gives a new id, which the accepted line shows. */
+  int64_t deadline = view.record.deadline_utc;
+  fake_now = (time_t)(deadline - 100);
+  fake_log[0] = '\0';
+  fake_deliver_wakeup(id, gen);
+  snprintf(want, sizeof(want), "WAKEUP result=early lc=1 gen=%ld id=%ld eid=%ld now=%ld dl=%ld\n",
+           (long)gen, (long)id, (long)id, (long)fake_now, (long)deadline);
+  assert(strstr(fake_log, want));
+  assert(!strstr(fake_log, "result=accepted"));
+  assert(!strstr(fake_log, "HAPTIC_REQUEST"));
+
+  /* Accepted at the deadline, with the haptic request logged after it. */
+  view = prv_view();
+  id = view.record.wakeup_id;
+  fake_now = (time_t)deadline;
+  fake_log[0] = '\0';
+  fake_deliver_wakeup(id, gen);
+  snprintf(want, sizeof(want), "WAKEUP result=accepted lc=1 gen=%ld id=%ld eid=%ld now=%ld dl=%ld\n",
+           (long)gen, (long)id, (long)id, (long)fake_now, (long)deadline);
+  const char *accepted = strstr(fake_log, want);
+  assert(accepted);
+  assert(!strstr(fake_log, "result=early"));
+  const char *haptic = strstr(fake_log, "HAPTIC_REQUEST lc=1 phase=2 gen=");
+  assert(haptic && haptic > accepted);
+  assert(fake_haptic_count == 1);
+
+  /* Skip requests a haptic with no WAKEUP line. */
+  fake_log[0] = '\0';
+  session_coordinator_skip();
+  fake_run_timers();
+  assert(strstr(fake_log, "HAPTIC_REQUEST lc=1 phase=3 gen="));
+  assert(!strstr(fake_log, "WAKEUP"));
+  assert(fake_haptic_count == 2);
+}
+
 int main(void) {
   test_start_and_stop();
   test_stale_callback_is_ignored();
+  test_log_lines_report_callbacks_and_haptics();
   test_clock_schedule_and_storage_failures();
   test_stop_storage_failure_keeps_committed_session();
   test_deadline_callback_and_command_reconciliation();

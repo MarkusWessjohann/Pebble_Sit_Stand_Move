@@ -98,6 +98,8 @@ static void prv_reconcile_phase(SessionRecord *record, time_t now, bool overdue_
 }
 
 static void prv_request_haptic(void) {
+  APP_LOG(APP_LOG_LEVEL_INFO, "HAPTIC_REQUEST lc=%d phase=%d gen=%lu",
+          (int)s_record.lifecycle, (int)s_record.phase, (unsigned long)s_record.generation);
   vibes_short_pulse();
 }
 
@@ -710,15 +712,27 @@ static void prv_wakeup(const SessionEvent *event) {
   if ((s_record.lifecycle != SESSION_RUNNING && s_record.lifecycle != SESSION_TIMED_PAUSED) ||
       event->cookie != (int32_t)s_record.generation ||
       event->wakeup_id != s_record.wakeup_id) {
+    APP_LOG(APP_LOG_LEVEL_INFO, "WAKEUP result=stale lc=%d gen=%lu egen=%ld id=%ld eid=%ld",
+            (int)s_record.lifecycle, (unsigned long)s_record.generation, (long)event->cookie,
+            (long)s_record.wakeup_id, (long)event->wakeup_id);
     return;
   }
   time_t now;
   if (!prv_read_utc(&now)) {
+    APP_LOG(APP_LOG_LEVEL_INFO,
+            "WAKEUP result=accepted clock=invalid lc=%d gen=%lu id=%ld eid=%ld now=%ld dl=%ld",
+            (int)s_record.lifecycle, (unsigned long)s_record.generation,
+            (long)s_record.wakeup_id, (long)event->wakeup_id, (long)now,
+            (long)prv_active_deadline(&s_record));
     wakeup_cancel(event->wakeup_id);
     prv_lose_wakeup(SESSION_ERROR_CLOCK);
     return;
   }
   int64_t deadline = prv_active_deadline(&s_record);
+  APP_LOG(APP_LOG_LEVEL_INFO, "WAKEUP result=%s lc=%d gen=%lu id=%ld eid=%ld now=%ld dl=%ld",
+          now < deadline ? "early" : "accepted", (int)s_record.lifecycle,
+          (unsigned long)s_record.generation, (long)s_record.wakeup_id, (long)event->wakeup_id,
+          (long)now, (long)deadline);
   if (now < deadline) {
     SessionRecord candidate = s_record;
     WakeupId old_id = s_record.wakeup_id;
@@ -1067,6 +1081,7 @@ void session_coordinator_recover(void) {
 }
 
 void session_coordinator_wakeup(WakeupId id, int32_t cookie) {
+  APP_LOG(APP_LOG_LEVEL_INFO, "WAKEUP_DELIVERED id=%ld gen=%ld", (long)id, (long)cookie);
   prv_enqueue((SessionEvent){ .type = EVENT_WAKEUP, .wakeup_id = id,
                               .cookie = cookie });
 }
