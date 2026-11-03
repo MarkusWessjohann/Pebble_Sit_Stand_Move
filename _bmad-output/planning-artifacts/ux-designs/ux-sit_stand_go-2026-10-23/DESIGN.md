@@ -38,13 +38,13 @@ Use Pebble native text styles: `typography.primary`, `typography.secondary`, and
 
 Single Pebble Time 2 watch form factor. Use the native display-safe area and spacing; exact dimensions are platform-defined. On the foreground session screen, place content in this vertical order:
 
-1. Current wall-clock time, secondary size (Gothic 24), at the top.
+1. Current wall-clock time, secondary size (Gothic 24), at the top, centered on the screen width.
 2. Remaining time for the active phase, large and primary.
 3. Phase icon directly below the remaining time.
-4. Current phase name (`Sit`, `Stand`, or `Move`) paired directly with its icon below the countdown.
-5. Bottom day tally with completed `Sit`, `Stand`, and `Move` counts, secondary size (Gothic 24), laid out so it fits without clipping.
+4. Current phase name (`Sit`, `Stand`, or `Move`) paired directly with its icon below the countdown. Items 2 to 4 form one block centered on the screen in both directions.
+5. Bottom day tally of completed counts in one compact row, secondary size (Gothic 24), written `S3 T2 M1` (S = Sit, T = Stand, M = Move), so it fits without clipping.
 
-The top, middle, and bottom physical buttons are the session's right-side controls. Each control's label sits in a column at the right screen edge, vertically level with its physical button; the content column above is narrowed so it never overlaps the label column. The watch menu contains session-level commands. Do not introduce additional surfaces beyond the session view and native watch menu without a confirmed need.
+The top, middle, and bottom physical buttons are the session's right-side controls. Each control's label sits in a column at the right screen edge, vertically level with its physical button and 5 px in from the edge. The centered block may extend under the label column's width, so label backgrounds are transparent and the countdown text must not collide with a label. The watch menu contains session-level commands. Do not introduce additional surfaces beyond the session view and native watch menu without a confirmed need.
 
 Verify the finished app's layout, controls, legibility, and firmware-dependent behavior on Pebble Time 2 in Story 1.8 before release.
 
@@ -64,9 +64,9 @@ Use native Pebble system geometry where applicable. No custom corner radii or or
 | Session time | Top of session view | Native Gothic 24 secondary text. |
 | Phase remaining | Center/primary region of session view | Largest relevant native text. |
 | Phase icon and name | Together below remaining time | Monochrome chair icon for `Sit`, standing-person icon for `Stand`, or moving-person icon for `Move`, paired with the readable phase label. Text remains authoritative; use suitable native assets and verify on target hardware. |
-| Day tally | Bottom of session view | Native Gothic 24 secondary text showing completed Sit / Stand / Move totals for today; may stack or compact to fit the display-safe area. |
+| Day tally | Bottom of session view | Native Gothic 24 secondary text in one compact row, `S3 T2 M1`, showing completed Sit / Stand / Move totals for today. |
 | Top hardware button | Right screen edge, level with the top right-side physical button | Label shows `+5` while running and its current duration choice during a timed break. |
-| Middle hardware button | Right screen edge, level with the middle right-side physical button | Label shows `Ⅱ`; its state label is `BREAK` during a timed break and `PAUSED` during indefinite manual pause. |
+| Middle hardware button | Right screen edge, level with the middle right-side physical button | Label shows `II` while running (an ASCII stand-in for `Ⅱ`); its state label is `BREAK` during a timed break and `PAUSED` during indefinite manual pause. |
 | Bottom hardware button | Right screen edge, level with the bottom right-side physical button | Label shows `+10` while running and its current duration choice during a timed break. |
 | Watch menu | Native watch menu | Use native Pebble menu-row presentation. Show Start when inactive; while active, list Pause/Resume, Skip, then Stop. |
 | Status message | Session view, when needed | Readable native text reports invalid clock, persistence, or wakeup/scheduling failures. Communicate failure without relying on color. |

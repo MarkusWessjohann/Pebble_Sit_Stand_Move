@@ -107,11 +107,11 @@ UX-DR13: Verify the app's display-safe layout and native control behavior on the
 
 UX-DR14: Render the current wall-clock time and the daily Sit/Stand/Move tally in the native Gothic 24 text style (about 1.7x the previous Gothic 14; the nearest native size to the requested 50% increase), replacing the "small" treatment in UX-DR3 and UX-DR4. No custom or scaled font rendering.
 
-UX-DR15: The enlarged daily tally must fit the Pebble Time 2 display-safe area without clipping or truncation in every lifecycle state (inactive, running, `PAUSED`, `BREAK`, and error shown). The layout may stack or compact the tally; labels stay literal (`Sit`, `Stand`, `Move`) and counts stay textually identifiable.
+UX-DR15: The enlarged daily tally must fit the Pebble Time 2 display-safe area without clipping or truncation in every lifecycle state (inactive, running, `PAUSED`, `BREAK`, and error shown). The owner chose one compact row, `S3 T2 M1` (S = Sit, T = Stand, M = Move; 2026-11-03), which supersedes the earlier requirement that the tally labels stay literal; counts stay textually identifiable and the phase name stays literal.
 
-UX-DR16: Show each hardware-button label at the right screen edge, vertically level with its physical button, replacing the single centered `TOP … BOTTOM …` line. Top: `+5` while running, or the shorter alternative duration while timed-paused. Middle: the pause control, with `BREAK` while timed-paused and `PAUSED` while manually paused. Bottom: `+10` while running, or the longer alternative duration while timed-paused. This refines UX-DR6 and does not change button functions.
+UX-DR16: Show each hardware-button label at the right screen edge, vertically level with its physical button, replacing the single centered `TOP … BOTTOM …` line. Top: `+5` while running, or the shorter alternative duration while timed-paused. Middle: `II` while running, with `BREAK` while timed-paused and `PAUSED` while manually paused. Bottom: `+10` while running, or the longer alternative duration while timed-paused. This refines UX-DR6 and does not change button functions.
 
-UX-DR17: The active phase countdown remains the strongest visual element (UX-DR4) and the phase icon and name stay directly below it (UX-DR3). The content column narrows so it never overlaps the right-edge label column, and countdown, icon, phase name, tally, button labels, and error text do not overlap or clip. Verify on Pebble Time 2 hardware, with emulator evidence recorded separately.
+UX-DR17: The active phase countdown remains the strongest visual element (UX-DR4) and the phase icon and name stay directly below it (UX-DR3). The countdown, icon, and phase name form one block centered on the screen in both directions, the clock is centered on the screen width, and the labels sit 5 px in from the right edge (2026-11-03 owner changes, superseding the narrowed content column). Countdown, icon, phase name, tally, button labels, and error text do not overlap or clip. Verify on Pebble Time 2 hardware, with emulator evidence recorded separately.
 
 ### FR Coverage Map
 
@@ -545,7 +545,7 @@ So that I can read the session view at a glance and know what each button does.
 
 **Given** the session view is shown
 **When** it renders today's Sit/Stand/Move tally
-**Then** the tally uses Gothic 24, stays at the bottom of the view, and reads `Sit`, `Stand`, and `Move` with their counts, including two-digit counts.
+**Then** the tally uses Gothic 24, stays at the bottom of the view, and reads as one compact row `S3 T2 M1` (S = Sit, T = Stand, M = Move; owner decision 2026-11-03), including two-digit counts.
 
 **Given** the enlarged tally and the optional error line
 **When** the view is shown while inactive, running, `PAUSED`, or `BREAK`, with and without an error
@@ -553,7 +553,7 @@ So that I can read the session view at a glance and know what each button does.
 
 **Given** a session is running
 **When** the session view is shown
-**Then** `+5` appears at the right edge level with the top button, a pause label level with the middle button, and `+10` level with the bottom button, and the centered `TOP … BOTTOM …` line is no longer shown.
+**Then** `+5` appears at the right edge level with the top button, `II` level with the middle button, and `+10` level with the bottom button, and the centered `TOP … BOTTOM …` line is no longer shown.
 
 **Given** a session is timed-paused
 **When** the session view is shown
@@ -569,7 +569,7 @@ So that I can read the session view at a glance and know what each button does.
 
 **Given** the label column is at the right edge
 **When** the content column is laid out
-**Then** the countdown, phase icon, phase name, and tally are narrowed or placed so none overlaps the label column; the countdown remains the strongest element and the icon and name remain directly below it.
+**Then** the countdown, phase icon, and phase name form one block centered on the screen in both directions, the clock is centered on the screen width, and the labels sit 5 px in from the right edge; none of them overlaps another, the countdown remains the strongest element, and the icon and name remain directly below it.
 
 **Given** the layout changes
 **When** the session is used

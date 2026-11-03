@@ -9,7 +9,7 @@ static TextLayer *s_time_layer;
 static TextLayer *s_countdown_layer;
 static Layer *s_icon_layer;
 static TextLayer *s_phase_layer;
-static TextLayer *s_controls_layer;
+static TextLayer *s_label_layers[3];
 static TextLayer *s_tally_layer;
 static TextLayer *s_error_layer;
 static Window *s_menu_window;
@@ -18,9 +18,15 @@ static AppTimer *s_refresh_timer;
 static char s_time_text[16];
 static char s_countdown_text[16];
 static char s_phase_text[16];
-static char s_controls_text[24];
+static char s_label_text[3][8];
 static char s_tally_text[48];
 static char s_error_text[32];
+
+#define LABEL_COLUMN_WIDTH 78
+#define LABEL_RIGHT_MARGIN 5
+#define LABEL_HEIGHT 22
+#define TALLY_HEIGHT 28
+#define ERROR_HEIGHT 18
 
 static const char *prv_error_text(SessionError error) {
   switch (error) {
@@ -94,34 +100,42 @@ static void prv_render(void) {
     text_layer_set_font(s_phase_layer, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD));
     int shorter = view.record.pause_duration_seconds == 5 * 60 ? 10 : 5;
     int longer = view.record.pause_duration_seconds == 30 * 60 ? 10 : 30;
-    snprintf(s_controls_text, sizeof(s_controls_text), "TOP %dm BOTTOM %dm", shorter, longer);
+    snprintf(s_label_text[0], sizeof(s_label_text[0]), "%dm", shorter);
+    snprintf(s_label_text[1], sizeof(s_label_text[1]), "BREAK");
+    snprintf(s_label_text[2], sizeof(s_label_text[2]), "%dm", longer);
   } else if (view.record.lifecycle == SESSION_RUNNING || view.record.lifecycle == SESSION_PAUSED) {
     snprintf(s_countdown_text, sizeof(s_countdown_text), "%02d:%02d",
              (int)(view.remaining_seconds / 60), (int)(view.remaining_seconds % 60));
-    s_controls_text[0] = '\0';
+    for (int i = 0; i < 3; i++) {
+      s_label_text[i][0] = '\0';
+    }
     if (view.record.lifecycle == SESSION_RUNNING) {
-      snprintf(s_controls_text, sizeof(s_controls_text), "TOP +5 BOTTOM +10");
+      snprintf(s_label_text[0], sizeof(s_label_text[0]), "+5");
+      snprintf(s_label_text[1], sizeof(s_label_text[1]), "II");
+      snprintf(s_label_text[2], sizeof(s_label_text[2]), "+10");
     }
     if (view.record.lifecycle == SESSION_PAUSED) {
-      snprintf(s_phase_text, sizeof(s_phase_text), "PAUSED: %s", prv_phase_name(view.record.phase));
-      text_layer_set_font(s_phase_layer, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD));
-    } else {
-      snprintf(s_phase_text, sizeof(s_phase_text), "%s", prv_phase_name(view.record.phase));
-      text_layer_set_font(s_phase_layer, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD));
+      snprintf(s_label_text[1], sizeof(s_label_text[1]), "PAUSED");
     }
+    snprintf(s_phase_text, sizeof(s_phase_text), "%s", prv_phase_name(view.record.phase));
+    text_layer_set_font(s_phase_layer, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD));
   } else {
     snprintf(s_countdown_text, sizeof(s_countdown_text), "--:--");
     snprintf(s_phase_text, sizeof(s_phase_text), "Ready");
-    s_controls_text[0] = '\0';
+    for (int i = 0; i < 3; i++) {
+      s_label_text[i][0] = '\0';
+    }
     text_layer_set_font(s_phase_layer, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD));
   }
   text_layer_set_text(s_countdown_layer, s_countdown_text);
   text_layer_set_text(s_phase_layer, s_phase_text);
-  text_layer_set_text(s_controls_layer, s_controls_text);
+  for (int i = 0; i < 3; i++) {
+    text_layer_set_text(s_label_layers[i], s_label_text[i]);
+  }
   if (s_icon_layer) {
     layer_mark_dirty(s_icon_layer);
   }
-  snprintf(s_tally_text, sizeof(s_tally_text), "Sit %u  Stand %u  Move %u",
+  snprintf(s_tally_text, sizeof(s_tally_text), "S%u T%u M%u",
            (unsigned)view.record.sit_count, (unsigned)view.record.stand_count,
            (unsigned)view.record.move_count);
   text_layer_set_text(s_tally_layer, s_tally_text);
@@ -235,41 +249,60 @@ static void prv_click_config_provider(void *context) {
   window_long_click_subscribe(BUTTON_ID_SELECT, 500, prv_menu_click_handler, NULL);
 }
 
+static TextLayer *prv_create_label_layer(Layer *root, GRect bounds, int center_y) {
+  TextLayer *layer = text_layer_create(GRect(bounds.size.w - LABEL_COLUMN_WIDTH -
+                                             LABEL_RIGHT_MARGIN,
+                                             center_y - LABEL_HEIGHT / 2,
+                                             LABEL_COLUMN_WIDTH, LABEL_HEIGHT));
+  /* The countdown is centered on the full screen width, so its layer overlaps this one. */
+  text_layer_set_background_color(layer, GColorClear);
+  text_layer_set_font(layer, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD));
+  text_layer_set_text_alignment(layer, GTextAlignmentRight);
+  layer_add_child(root, text_layer_get_layer(layer));
+  return layer;
+}
+
 static void prv_window_load(Window *window) {
   Layer *root = window_get_root_layer(window);
   GRect bounds = layer_get_bounds(root);
 
-  s_time_layer = text_layer_create(GRect(0, 0, bounds.size.w, 22));
-  text_layer_set_font(s_time_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
+  s_time_layer = text_layer_create(GRect(0, 0, bounds.size.w, 26));
+  text_layer_set_font(s_time_layer, fonts_get_system_font(FONT_KEY_GOTHIC_24));
   text_layer_set_text_alignment(s_time_layer, GTextAlignmentCenter);
   layer_add_child(root, text_layer_get_layer(s_time_layer));
 
-  s_countdown_layer = text_layer_create(GRect(0, 22, bounds.size.w, 52));
+  /* Countdown, icon, and phase name form one block centered on the screen, both axes. */
+  int16_t block_y = (bounds.size.h - (40 + 27 + 28)) / 2;
+
+  s_countdown_layer = text_layer_create(GRect(0, block_y, bounds.size.w, 40));
   text_layer_set_font(s_countdown_layer, fonts_get_system_font(FONT_KEY_BITHAM_30_BLACK));
   text_layer_set_text_alignment(s_countdown_layer, GTextAlignmentCenter);
   text_layer_set_overflow_mode(s_countdown_layer, GTextOverflowModeWordWrap);
   layer_add_child(root, text_layer_get_layer(s_countdown_layer));
 
-  s_icon_layer = layer_create(GRect(0, 74, bounds.size.w, 27));
+  s_icon_layer = layer_create(GRect(0, block_y + 40, bounds.size.w, 27));
   layer_set_update_proc(s_icon_layer, prv_draw_icon);
   layer_add_child(root, s_icon_layer);
 
-  s_phase_layer = text_layer_create(GRect(0, 99, bounds.size.w, 28));
+  s_phase_layer = text_layer_create(GRect(0, block_y + 40 + 27, bounds.size.w, 28));
   text_layer_set_font(s_phase_layer, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD));
   text_layer_set_text_alignment(s_phase_layer, GTextAlignmentCenter);
   layer_add_child(root, text_layer_get_layer(s_phase_layer));
 
-  s_controls_layer = text_layer_create(GRect(0, 127, bounds.size.w, 16));
-  text_layer_set_font(s_controls_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
-  text_layer_set_text_alignment(s_controls_layer, GTextAlignmentCenter);
-  layer_add_child(root, text_layer_get_layer(s_controls_layer));
+  /* Labels sit level with the top, middle, and lower right-side buttons. The quarter positions
+   * are an estimate and must be checked against Pebble Time 2 hardware. */
+  s_label_layers[0] = prv_create_label_layer(root, bounds, bounds.size.h / 4);
+  s_label_layers[1] = prv_create_label_layer(root, bounds, bounds.size.h / 2);
+  s_label_layers[2] = prv_create_label_layer(root, bounds, bounds.size.h * 3 / 4);
 
-  s_tally_layer = text_layer_create(GRect(0, bounds.size.h - 32, bounds.size.w, 14));
-  text_layer_set_font(s_tally_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
+  int16_t tally_y = bounds.size.h - ERROR_HEIGHT - TALLY_HEIGHT;
+  s_tally_layer = text_layer_create(GRect(0, tally_y, bounds.size.w, TALLY_HEIGHT));
+  text_layer_set_font(s_tally_layer, fonts_get_system_font(FONT_KEY_GOTHIC_24));
   text_layer_set_text_alignment(s_tally_layer, GTextAlignmentCenter);
   layer_add_child(root, text_layer_get_layer(s_tally_layer));
 
-  s_error_layer = text_layer_create(GRect(0, bounds.size.h - 18, bounds.size.w, 18));
+  s_error_layer = text_layer_create(GRect(0, bounds.size.h - ERROR_HEIGHT, bounds.size.w,
+                                          ERROR_HEIGHT));
   text_layer_set_font(s_error_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
   text_layer_set_text_alignment(s_error_layer, GTextAlignmentCenter);
   layer_add_child(root, text_layer_get_layer(s_error_layer));
@@ -281,14 +314,16 @@ static void prv_window_unload(Window *window) {
   text_layer_destroy(s_countdown_layer);
   layer_destroy(s_icon_layer);
   text_layer_destroy(s_phase_layer);
-  text_layer_destroy(s_controls_layer);
+  for (int i = 0; i < 3; i++) {
+    text_layer_destroy(s_label_layers[i]);
+    s_label_layers[i] = NULL;
+  }
   text_layer_destroy(s_tally_layer);
   text_layer_destroy(s_error_layer);
   s_time_layer = NULL;
   s_countdown_layer = NULL;
   s_icon_layer = NULL;
   s_phase_layer = NULL;
-  s_controls_layer = NULL;
   s_tally_layer = NULL;
   s_error_layer = NULL;
 }

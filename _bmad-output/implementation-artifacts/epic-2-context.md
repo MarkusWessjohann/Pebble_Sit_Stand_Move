@@ -13,9 +13,9 @@ The owner can read the current time and the daily tally more easily, and can see
 ## Requirements & Constraints
 
 - Current wall-clock time and the daily Sit/Stand/Move tally use the native Gothic 24 text style (the nearest native size to a requested 50% increase over Gothic 14). No custom or scaled font rendering.
-- The enlarged tally must fit the display-safe area without clipping or truncation in every lifecycle state (inactive, running, `PAUSED`, `BREAK`, with and without an error). Layout may stack or compact it; labels stay literal and counts stay textually identifiable.
-- Button labels sit at the right screen edge, level with their physical button, replacing the single centered `TOP … BOTTOM …` line. Top: `+5` running, shorter alternative duration while timed-paused. Middle: pause control, with `BREAK` timed-paused and `PAUSED` manually paused. Bottom: `+10` running, longer alternative while timed-paused. No labels when inactive; no `+5`/`+10` while manually paused.
-- The countdown stays the strongest element; the phase icon and name stay directly below it. The content column narrows so it never overlaps the label column.
+- The enlarged tally must fit the display-safe area without clipping or truncation in every lifecycle state (inactive, running, `PAUSED`, `BREAK`, with and without an error). The tally is one compact row `S3 T2 M1` (owner decision); counts stay textually identifiable.
+- Button labels sit at the right screen edge, level with their physical button, replacing the single centered `TOP … BOTTOM …` line. Top: `+5` running, shorter alternative duration while timed-paused. Middle: `II` running, with `BREAK` timed-paused and `PAUSED` manually paused. Bottom: `+10` running, longer alternative while timed-paused. No labels when inactive; no `+5`/`+10` while manually paused.
+- The countdown stays the strongest element; the phase icon and name stay directly below it. Countdown, icon, and phase name are one block centered on the screen; the clock is centered on the screen width; labels sit 5 px in from the right edge.
 - Hardware button functions, menu behavior, coordinator logic, and persistence are unchanged. Existing tests keep passing.
 - Text is authoritative; color and icons must never be the sole identifier of phase or state. Use `Move`, never `Walk`.
 - Native Pebble styles only: no invented palette values, fonts, shadows, or decoration.

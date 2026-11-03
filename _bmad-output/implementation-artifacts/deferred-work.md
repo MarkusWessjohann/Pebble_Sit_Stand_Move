@@ -45,3 +45,15 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-1-7-extend-the-active-phase.md`
   summary: Exercise the running top/bottom Extend presses, the `TOP +5 BOTTOM +10` label fit and legibility, and the Extend Wakeup on the SDK or Pebble Time 2.
   evidence: The host harness does not compile `sit_stand_move.c`; the label, click handlers and the 17-character line in the 14pt controls layer are inspected only. Story 1.8 owns UI and device verification.
+
+## Deferred from: code review of spec-2-1-enlarge-the-time-and-tally-and-place-button-labels-beside-the-buttons (2026-11-03)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-1-enlarge-the-time-and-tally-and-place-button-labels-beside-the-buttons.md`
+  summary: Decide whether the 144x168 (aplite, basalt, diorite, flint) and round chalk targets still built from `package.json` need a layout, or should be dropped from `targetPlatforms`.
+  evidence: The new layout uses a fixed 78 px label column, a label centered at 3/4 of the screen height, and a full-width tally at `h - 46`. On 168 px height the third label (about 115 to 137 px) overlaps the tally (starts at 122 px). Intent targets Pebble Time 2 only (NFR1), so the spec left this out.
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-1-enlarge-the-time-and-tally-and-place-button-labels-beside-the-buttons.md`
+  summary: On the emery emulator and Pebble Time 2, check the label alignment with the buttons, the 100:00 countdown, the clock height at Gothic 24, and the label/tally gap, in all lifecycle states and with an error shown.
+  evidence: The positions (1/4, 1/2, 3/4 of height), the 78 px column, the 26 px clock layer and 40 px countdown layer are estimates; the sandbox has no Pebble SDK. Label 3 ends at 182 px and the tally starts at 182 px, so the margin is zero by calculation. Unverified.
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-1-enlarge-the-time-and-tally-and-place-button-labels-beside-the-buttons.md`
+  summary: Cover the right-edge label text, phase text and `S%u T%u M%u` tally format with a host test, for example by extracting the formatting into a pure function that `scripts/test.sh` compiles.
+  evidence: `sit_stand_move.c` is not compiled by the host harness. Swapping `shorter` and `longer`, or changing `II`, leaves every test passing. The same gap is already recorded for Stories 1.6 and 1.7.
