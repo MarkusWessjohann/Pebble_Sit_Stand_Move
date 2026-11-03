@@ -8,7 +8,7 @@ scope: Pebble Time 2 sit/stand/move reminder app
 status: final
 created: 2026-10-21
 updated: 2026-11-03
-binds: [FR-1, FR-2, FR-3, FR-4, FR-5, FR-6, FR-7, FR-9, FR-10, FR-11, UJ-1, UJ-2]
+binds: [FR-1, FR-2, FR-3, FR-4, FR-5, FR-6, FR-7, FR-9, FR-10, FR-11, FR-12, FR-13, FR-14, FR-15, UJ-1, UJ-2]
 sources:
   - _bmad-output/planning-artifacts/prds/prd-sit_stand_go-2026-10-21/prd.md
 companions: []
@@ -46,7 +46,7 @@ An event-driven state machine in one native Pebble C watch app. One session coor
 
 - **Binds:** FR-2, FR-3, FR-5, FR-7, UJ-1–UJ-2
 - **Prevents:** A stale phase display or a burst of old notifications after device shutdown or delayed wakeup.
-- **Rule:** At recovery when a running phase deadline is due (`now >= phase_deadline`), including one late phase deadline, process elapsed phases in order and rebase the resulting current phase to its full default duration from recovery time. A timed-pause deadline is not a phase deadline; recover it under AD-12/AD-16 by resuming the interrupted phase with saved remaining duration and no Cycle advancement. An on-time phase callback advances sequentially from its expired deadline. Emit at most one haptic for the resulting current phase; never replay stale haptics.
+- **Rule:** At recovery when a running phase deadline is due (`now >= phase_deadline`), including one late phase deadline, process elapsed phases in order and rebase the resulting current phase to its full configured duration (AD-19) from recovery time. A timed-pause deadline is not a phase deadline; recover it under AD-12/AD-16 by resuming the interrupted phase with saved remaining duration and no Cycle advancement. An on-time phase callback advances sequentially from its expired deadline. Emit at most one haptic for the resulting current phase; never replay stale haptics.
 
 ### AD-5 — Watch owns runtime behavior [ADOPTED]
 
@@ -54,11 +54,12 @@ An event-driven state machine in one native Pebble C watch app. One session coor
 - **Prevents:** Session state diverging between the watch, phone, and a cloud service.
 - **Rule:** The watch app alone owns runtime session state, transitions, wakeup scheduling, and phase notifications. A phone process or network service is not required during a session.
 
-### AD-6 — Phase and control semantics remain product-defined [ADOPTED]
+### AD-6 — Phase and control semantics remain product-defined [ADOPTED, amended 2026-11-03]
 
-- **Binds:** FR-1–FR-2, FR-4–FR-7
+- **Binds:** FR-1–FR-2, FR-4–FR-7, FR-12–FR-14
 - **Prevents:** Different implementations choosing different cycle lengths or interpreting pause, skip, extend, and restart differently.
-- **Rule:** V1 uses fixed default durations: Sit 45 minutes, Stand 10 minutes, Move 5 minutes; extension adds user-selected time only to the active Phase and does not change defaults. The user may Start at any wall-clock time; the first Sit phase begins immediately at Start and the cycle is relative to that moment, never aligned to full-hour boundaries. Stopping makes it inactive and non-resumable. Manual Pause preserves phase and remaining duration without a deadline; timed Pause preserves phase and remaining duration while a separate 5/10/30-minute pause deadline runs. On timed-pause end, resume the same Phase; do not advance the Cycle. Skip enters the next Phase immediately at its default duration without carrying remaining time forward. Extend moves the active Phase deadline by the selected duration.
+- **Rule:** V1 phase lengths default to Sit 45 minutes, Stand 10 minutes, Move 5 minutes and are owner-configurable under AD-19; every use of "default duration" below means the configured length of that Phase, read when the Phase starts. Extension adds user-selected time only to the active Phase and does not change the configured lengths. The user may Start at any wall-clock time; the first Sit phase begins immediately at Start and the cycle is relative to that moment, never aligned to full-hour boundaries. Stopping makes it inactive and non-resumable. Manual Pause preserves phase and remaining duration without a deadline; timed Pause preserves phase and remaining duration while a separate 5/10/30-minute pause deadline runs. On timed-pause end, resume the same Phase; do not advance the Cycle. Skip enters the next Phase immediately at its configured duration without carrying remaining time forward. Extend moves the active Phase deadline by the selected duration.
+- **Supersedes:** The original "fixed default durations" rule (2026-10-21), by owner decision on 2026-11-03.
 
 ### AD-7 — Haptic alerts and app UI have separate responsibilities [ADOPTED]
 
@@ -112,8 +113,8 @@ An event-driven state machine in one native Pebble C watch app. One session coor
 ### AD-15 — Extension is additive to the active Phase
 
 - **Binds:** FR-7
-- **Prevents:** Different interpretations of whether extension replaces, stacks, or changes the defaults.
-- **Rule:** Extend menu offers +5 minutes and +10 minutes. Each selection adds exactly that duration once to the current phase deadline; repeated Extend commands stack by adding each selected amount. Extension never changes 45/10/5 defaults.
+- **Prevents:** Different interpretations of whether extension replaces, stacks, or changes the configured lengths.
+- **Rule:** Extend menu offers +5 minutes and +10 minutes. Each selection adds exactly that duration once to the current phase deadline; repeated Extend commands stack by adding each selected amount. Extension never changes the configured phase lengths.
 
 ### AD-16 — Timed Pause resumes the interrupted Phase [ADOPTED]
 
@@ -133,13 +134,19 @@ An event-driven state machine in one native Pebble C watch app. One session coor
 - **Prevents:** Treating repetition as retried haptic attempts, replaying an alert after relaunch, a dismiss press also firing the middle control, and an alert that never stops.
 - **Rule:** With the Until Select pattern, the alert is one committed haptic attempt: the AD-12 haptic-attempt marker is persisted once, before the first vibration, and repetition is presentation of that one attempt, never a retry. The alert repeats at a fixed interval until the first of: the owner presses Select, a 2-minute cap after it starts, the session is stopped, a newer haptic-requesting transition supersedes it (only one alert runs at a time), or the app exits. The alert is volatile app state, never persisted; relaunch and overdue recovery do not resume it, and recovery starts at most one new alert for a newly reconciled transition. While an alert is repeating, Select is handled before the middle-control dispatch (`session_coordinator_middle_control()`): it stops the alert and enqueues no session event. Up, Down, long-press Select, and menu commands keep their normal functions. When no alert is repeating, Select is unchanged. The session view shows a text cue while the alert repeats.
 
+### AD-19 — Phase lengths are owner-configurable, stored apart from the session record [ADOPTED, 2026-11-03]
+
+- **Binds:** FR-12, FR-13, FR-14, FR-15, AD-1, AD-2, AD-6, AD-9
+- **Prevents:** A second source of timing truth in the UI, a change to a running phase's deadline or Wakeup, a schema change to the session record, a half-reset set of lengths, and a recovery that assumes a 60-minute cycle.
+- **Rule:** The owner may set the length of Sit, Stand, and Move from 5 to 60 minutes in steps of 5 (defaults 45, 10, 5) in the native Settings window; Reset restores the defaults. The three lengths are one small persistent record under their own key, outside the AD-9 session record and separate from the AD-14 haptic key, so one write replaces all three; the session record schema does not change. Each stored value is validated on its own, and a missing or invalid value falls back to that Phase's default without an error; a record of the wrong size is not trusted and every Phase reads its default. The Session Coordinator reads the lengths through its single duration lookup, only when a Phase starts: automatic transition, Skip, Start, and the AD-4 rebase. The UI only writes the setting and never computes or changes a deadline. A change never touches a running phase's deadline, a paused phase's remaining duration, the persisted WakeupId, or the generation, and nothing is rescheduled because of it. The overdue fast-forward over whole elapsed cycles uses the sum of the configured lengths, never a fixed 60 minutes. Timed Pause choices (AD-16) and Extend amounts (AD-15) are unchanged, and the daily tally counts naturally completed phases whatever their length. The haptic pattern (AD-14) remains the only notification setting; the lengths are not one.
+
 ## Consistency Conventions
 
 | Concern | Convention |
 | --- | --- |
 | Session lifecycle | `inactive`, `running`, `paused`, or `timed_paused`; only the coordinator may transition lifecycle state. |
 | Phase identity and order | Stable phase identifiers for Sit, Stand, Move; transitions follow Sit → Stand → Move → Sit. |
-| Default durations | V1 defaults are fixed at Sit 45m, Stand 10m, Move 5m; extension never changes defaults. |
+| Phase lengths | Defaults Sit 45m, Stand 10m, Move 5m; owner-configurable 5 to 60m in steps of 5 in their own key, read by the coordinator only when a Phase starts; extension never changes them (AD-19). |
 | Time | UTC epoch deadline is authoritative; countdown and visible phase state are derived. |
 | Persistence | Record fields/validity are fixed by AD-9. Running stores phase deadline+WakeupId; timed_paused stores pause-end deadline+WakeupId and interrupted phase remaining duration; paused/inactive have no Wakeup. |
 | Wakeup identity | Persist current `WakeupId`; cookie carries mutation generation. Only coordinator schedules, cancels, and queries; reject callbacks unless ID and generation match the record. |
@@ -150,7 +157,7 @@ An event-driven state machine in one native Pebble C watch app. One session coor
 | Wakeup cookie | Cookie carries the persisted session generation; increment on every deadline-changing mutation (AD-11). |
 | Wakeup query | Running record persists current `WakeupId`; only coordinator queries/schedules/cancels. |
 | Haptic delivery | On-time automatic and Skip transitions request one haptic; Start/Pause/Resume/Stop/Extend do not. Recovery requests one for current phase; at-most-once attempt, best-effort delivery (AD-12). |
-| Notification mode | Haptic only; owner-selectable pattern is the sole setting, stored in its own key; no alternate channel (AD-14). |
+| Notification mode | Haptic only; owner-selectable pattern is the sole notification setting, stored in its own key; no alternate channel (AD-14). |
 | Repeating alert | Until Select repeats one committed haptic attempt; volatile, capped at 2 minutes, dismissed by Select before middle-control dispatch (AD-18). |
 
 ## Stack
@@ -196,6 +203,7 @@ src/
 | FR-5 Timed Pause | Session Coordinator, Wakeup adapter | AD-1–AD-4, AD-6–AD-7, AD-9–AD-12, AD-16–AD-17 |
 | FR-6 Skip | Session Coordinator, Wakeup adapter | AD-1–AD-3, AD-6–AD-7, AD-9–AD-12 |
 | FR-7 Extend | Session Coordinator, Wakeup adapter | AD-1–AD-3, AD-6, AD-9–AD-11, AD-15 |
+| FR-12–FR-15 Phase lengths and Reset | Session Coordinator (duration lookup), Watch UI (Settings window), phase-length settings key | AD-1–AD-2, AD-6, AD-9, AD-19 |
 | UJ-1 Main session journey | Watch UI, Session Coordinator | AD-1–AD-15 |
 | UJ-2 Timed pause/resume | Watch UI, Session Coordinator, Wakeup adapter | AD-1–AD-4, AD-6–AD-7, AD-9–AD-12, AD-16–AD-17 |
 
@@ -208,4 +216,4 @@ src/
 - **Timing tolerance:** Agree a measurable wakeup tolerance before Story 1.8 and verify it on Pebble Time 2 with the finished app, including forward/backward clock jumps. Invalid-time behavior is fixed in AD-10/AD-12: Start remains inactive with visible error; a running Session retains state and suppresses scheduling/haptics until valid UTC returns, then reconciles.
 - **Extension UI navigation:** Product decision fixes +5/+10 minute options; detailed Pebble button navigation and selected-state presentation belong to UX, with all choices dispatched through Session Coordinator.
 - **Packaging and release channel:** build setup must use pinned CLI/SDK versions and record reproducible build/install steps before implementation. Record physical-device verification results from Story 1.8 before release.
-- **Power and operational envelope:** use scheduled wakeups rather than a continuously active worker for the 45/10/5 schedule; verify battery impact and reliability on the physical target.
+- **Power and operational envelope:** use scheduled wakeups rather than a continuously active worker for the phase schedule (45/10/5 by default); verify battery impact and reliability on the physical target.

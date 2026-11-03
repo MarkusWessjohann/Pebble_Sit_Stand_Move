@@ -13,7 +13,7 @@ This PRD defines the first version of Sit Stand Go, a personal Pebble Time 2 wat
 
 ## 1. Vision
 
-Sit Stand Go helps its owner interrupt long periods of sitting with a repeating 45-minute Sit, 10-minute Stand, and 5-minute Move schedule. The owner can start a session at any wall-clock time, such as 09:10. The first 45-minute Sit phase begins immediately; subsequent phases are relative to actual deadlines, not aligned to full-hour boundaries. The owner can pause, skip, or extend an active phase by 5 or 10 minutes.
+Sit Stand Go helps its owner interrupt long periods of sitting with a repeating 45-minute Sit, 10-minute Stand, and 5-minute Move schedule. The owner can start a session at any wall-clock time, such as 09:10. The first 45-minute Sit phase begins immediately; subsequent phases are relative to actual deadlines, not aligned to full-hour boundaries. The owner can pause, skip, or extend an active phase by 5 or 10 minutes. The three phase lengths are defaults; the owner can change each one in Settings (FR-12).
 
 The product succeeds when phase deadlines reliably produce a haptic signal and open the app to show phase and remaining time, with no phone interaction during a session. After any overdue deadline, the app processes elapsed phases in order, restarts the resulting phase at full default duration, and emits only one haptic. The watch firmware must be verified before this behavior is treated as deliverable.
 
@@ -34,15 +34,18 @@ The product succeeds when phase deadlines reliably produce a haptic signal and o
 
 - **Session** — One user-started run of the repeating movement schedule.
 - **Phase** — One timed activity within a Session: Sit, Stand, or Move.
-- **Cycle** — The ordered sequence of Sit, Stand, and Move phases; the default Cycle lasts 60 minutes.
-- **Sit** — The default 45-minute seated phase.
-- **Stand** — The default 10-minute standing phase.
-- **Move** — The default 5-minute walking or other movement phase.
+- **Cycle** — The ordered sequence of Sit, Stand, and Move phases; the default Cycle lasts 60 minutes, and the configured Cycle lasts the sum of the three configured Phase lengths.
+- **Sit** — The seated phase, 45 minutes by default.
+- **Stand** — The standing phase, 10 minutes by default.
+- **Move** — The walking or other movement phase, 5 minutes by default.
+- **Configured length** — The length the owner set for a Phase in Settings (5 to 60 minutes in steps of 5); it equals the default until the owner changes it.
 - **Timed Pause** — A user-selected 5-, 10-, or 30-minute suspension of the active Phase; at its end the same Phase resumes with its saved remaining duration.
 
 ## 4. Features
 
 ### 4.1 Session and phase timing
+
+Throughout §4 and §8, the figures 45, 10, and 5 minutes and the words "default duration" are the default Phase lengths. When the owner has set other lengths (FR-12), every rule that names a default duration applies to the configured length of that Phase instead, read when the Phase starts.
 
 The user starts and stops a Session on Pebble Time 2 at any wall-clock time. A Session begins with Sit and repeats the Cycle in order from the actual Start time, not at a full-hour boundary. At each on-time Phase deadline, the app advances, emits one haptic, and opens the UI to show the new Phase and remaining time. After recovery when `now >= deadline`, it processes elapsed phases in order and restarts the resulting Phase with its full default duration from recovery time. Move advances to Sit for the next Cycle.
 
@@ -140,7 +143,7 @@ The user can extend the active Phase by +5 minutes or +10 minutes. The selected 
 
 #### FR-9: Choose the haptic pattern
 
-The user can open Settings from the native watch menu, in every session state, and choose the haptic pattern: Short, Long, Double, or Until Select. The choice persists across app restarts, Stop, and Start, and defaults to Short (the single short pulse). The only notification setting is the haptic pattern; there is no alternate channel.
+The user can open Settings from the native watch menu, in every session state, and choose the haptic pattern: Short, Long, Double, or Until Select. The choice persists across app restarts, Stop, and Start, and defaults to Short (the single short pulse). The haptic pattern is the only notification setting; there is no alternate channel. The Phase lengths (FR-12) are not a notification setting.
 
 **Consequences (testable):**
 - Settings is the last native menu row in every lifecycle state, and its window lists the four patterns in that order with the current choice marked in text.
@@ -160,13 +163,39 @@ With Until Select, the haptic repeats until the user presses Select, then stops.
 - Pressing Select while it repeats starts no timed pause and changes no session state.
 - With no alert repeating, Select behaves as before.
 
+### 5.3 Phase lengths
+
+#### FR-12: Set the length of each Phase
+
+The user can open Settings and set the length of Sit, Stand, and Move. Each length is chosen from 5 to 60 minutes in steps of 5. The defaults are 45, 10, and 5 minutes, so a user who never opens the setting sees the original behavior. Move keeps its name.
+
+**Consequences (testable):**
+- The Settings window lists the three lengths after the haptic patterns, each with its current value as text, for example `Sit 45 min`. Selecting a length row adds 5 minutes, wraps from 60 back to 5, saves, and keeps the window open with no preview.
+- A failed save leaves the previous value stored and shown.
+
+#### FR-13: Keep the lengths across restarts
+
+The three lengths persist across app restarts, Stop, and Start, independently of the Session record. A missing, wrong-sized, out-of-range, or not-a-multiple-of-5 stored value falls back to the default of that Phase without an error; the other Phases keep their valid values.
+
+#### FR-14: Apply a changed length to later Phases only
+
+A changed length applies to Phases that start after the change: an automatic phase transition, Skip, a new Start, and the full-length rebase after an overdue deadline. The running Phase keeps its deadline, a paused or timed-paused Phase keeps its saved remaining time, and no Wakeup is rescheduled because of the change. Timed Pause choices (5, 10, 30 minutes) and Extend amounts do not change. The daily tally keeps counting naturally completed Phases whatever their length; skipped and in-progress Phases stay excluded.
+
+**Consequences (testable):**
+- With Sit set to 30 and Stand to 5, a Session that is overdue by several days recovers to the Phase that a repeating 30/5/5 Cycle would be in, not the Phase a 60-minute Cycle would give.
+
+#### FR-15: Reset the lengths
+
+Settings offers a `Reset` entry after the length rows. Selecting it restores 45, 10, and 5 minutes in one save, updates the rows, keeps the window open, plays no preview, and leaves the haptic pattern unchanged. A failed save leaves the previous values stored and shown.
+
 ## 6. Non-Goals
 
 - Detecting posture, steps, or movement automatically.
 - Health advice, health outcome claims, activity history, or adherence analytics.
 - Social features, cloud services, or a required phone companion.
 - Scheduled working hours or automatic overnight start/stop.
-- Phase-duration customization, and any notification customization other than the haptic pattern (FR-9), in the first version.
+- Any notification customization other than the haptic pattern (FR-9), in the first version.
+- Customizing timed-pause choices (5, 10, 30 minutes) or extension amounts (+5, +10), and Phase lengths outside 5 to 60 minutes or in steps other than 5.
 
 ## 7. MVP Scope
 
@@ -178,13 +207,13 @@ With Until Select, the haptic repeats until the user presses Select, then stops.
 - Manual pause/resume; timed pause for 5, 10, or 30 minutes; skip; and +5/+10-minute Phase extension.
 - Background reminders, subject to the pre-release physical-device acceptance gate in §5.1 and Story 1.8.
 - Owner-selectable haptic pattern (Short, Long, Double, Until Select) in a Settings menu (FR-9 to FR-11).
+- Owner-set length for each of Sit, Stand, and Move (5 to 60 minutes, steps of 5) and a Reset to 45/10/5, in the same Settings menu (FR-12 to FR-15).
 
 ### 7.2 Out of Scope for MVP
 
 - Activity sensing and analytics, to keep this a reminder utility.
 - Automatic schedules, to keep operation user-started and controlled.
 - Cloud, social, or required phone-companion features, because a watch-first personal tool does not need them.
-- User-configurable default Phase lengths; defaults remain 45/10/5 for v1.
 
 ## 8. Success Metrics
 
@@ -212,3 +241,4 @@ For this personal tool, success is judged through direct use and timing checks r
 - §4.1 FR-3: Phase changes use a haptic signal; phase name and remaining time are shown in the opened app UI.
 - §2.2 UJ-1 and §4.1 FR-3: Pebble Time 2 foregrounds the app on scheduled Wakeup; verify on device.
 - §5.2: UTC time must be valid to start; otherwise the Session remains inactive with a visible clock-time error.
+- §5.3 FR-14: A changed Phase length applies from the next start of a Phase; the owner accepted that a running Phase keeps its current deadline.

@@ -37,4 +37,4 @@ The owner sets the length of Sit, Stand, and Move in the Settings window (5 to 6
 ## Cross-Story Dependencies
 
 - Story 4.2 builds on Story 4.1's persisted lengths and Settings rows (done). `sit_stand_move.c` is not compiled by the host harness.
-- The PRD (section 7.2) and architecture spine (AD-6, "Default durations" convention) still say lengths are fixed; they are not yet amended for Epic 4.
+- The PRD (FR-12 to FR-15) and the architecture spine (AD-6 amended, AD-19) describe configurable lengths.
