@@ -82,6 +82,7 @@ context:
 - Tests: alert timers (`timeout_ms >= 1000`) use their own stub slot driven by `fake_alert_tick()`; `fake_run_timers` ignores it, so it cannot hang. Two existing assertions used `3` as the "unsupported value" (now valid); they use `HAPTIC_PATTERN_COUNT`. No other earlier test changed.
 - Mutation audit on the host tests: 16 mutants, 15 killed after two test additions (repeat pulse type, init-without-deinit). One equivalent survivor: removing `s_ticks = 0` in `haptic_alert_start`, because `haptic_alert_stop` already zeroes it on every path in.
 - Verified: `sh scripts/test.sh` passes. `sit_stand_move.c` was not built (no Pebble SDK): the fourth row, the cue, and its width (about 14 characters at Gothic 24) need the emulator. The cue relies on the existing 1 s refresh to appear and clear, and the Select handler's re-render after a dismiss.
+- Emulator evidence (owner self-check, 2026-11-03, source: owner report; emulator, not Pebble Time 2): (4) pressing Select while an Until Select alert repeats stops it and does not start a 30-minute timed pause. The owner reported no problems. Not yet checked: the `Select to stop` cue (fit in the clock line, appearing and clearing), the 2-minute cap, Stop ending the alert, Skip superseding a running alert, the clock returning afterwards, and anything on Pebble Time 2.
 
 ## Spec Change Log
 
