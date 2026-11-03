@@ -45,3 +45,8 @@ bool phase_settings_step(SessionPhase phase) {
   *value = *value >= PHASE_MINUTES_MAX ? PHASE_MINUTES_MIN : (uint8_t)(*value + PHASE_MINUTES_STEP);
   return persist_write_data(PHASE_SETTINGS_KEY, minutes, sizeof(minutes)) == (int)sizeof(minutes);
 }
+
+bool phase_settings_reset(void) {
+  return persist_write_data(PHASE_SETTINGS_KEY, s_default_minutes, sizeof(s_default_minutes)) ==
+         (int)sizeof(s_default_minutes);
+}

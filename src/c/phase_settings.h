@@ -12,3 +12,6 @@ int phase_settings_get_minutes(SessionPhase phase);
 /* Adds 5 minutes to the phase's length, wrapping 60 to 5, and saves. Returns false, leaving the
  * stored lengths unchanged, if the phase is invalid or the write fails. */
 bool phase_settings_step(SessionPhase phase);
+/* Writes the default lengths (Sit 45, Stand 10, Move 5) in one record. Returns false, leaving the
+ * stored lengths unchanged, if the write fails. */
+bool phase_settings_reset(void);

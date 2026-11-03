@@ -3871,6 +3871,116 @@ static void test_phase_lengths_overdue_recovery_uses_configured_cycle_sum(void) 
   }
 }
 
+static void test_phase_lengths_reset_restores_defaults_in_one_write(void) {
+  fake_reset();
+  prv_set_minutes(20, 35, 60);
+  assert(phase_settings_reset());
+  assert(phase_settings_get_minutes(SESSION_PHASE_SIT) == 45);
+  assert(phase_settings_get_minutes(SESSION_PHASE_STAND) == 10);
+  assert(phase_settings_get_minutes(SESSION_PHASE_MOVE) == 5);
+
+  /* Already at the defaults, and with no record at all: nothing changes. */
+  assert(phase_settings_reset());
+  assert(phase_settings_get_minutes(SESSION_PHASE_SIT) == 45);
+  assert(phase_settings_get_minutes(SESSION_PHASE_STAND) == 10);
+  assert(phase_settings_get_minutes(SESSION_PHASE_MOVE) == 5);
+  fake_reset();
+  assert(phase_settings_reset());
+  assert(phase_settings_get_minutes(SESSION_PHASE_MOVE) == 5);
+
+  /* A corrupt record is repaired as a whole. */
+  const uint8_t bad[3] = { 7, 0, 65 };
+  assert(persist_write_data(PHASE_KEY, bad, sizeof(bad)) == 3);
+  assert(phase_settings_reset());
+  assert(phase_settings_get_minutes(SESSION_PHASE_SIT) == 45);
+  assert(phase_settings_get_minutes(SESSION_PHASE_STAND) == 10);
+  assert(phase_settings_get_minutes(SESSION_PHASE_MOVE) == 5);
+}
+
+static void test_phase_lengths_reset_failure_leaves_no_half_reset(void) {
+  fake_reset();
+  prv_set_minutes(20, 35, 60);
+  fake_fail_write = true;
+  assert(!phase_settings_reset());
+  fake_fail_write = false;
+  assert(phase_settings_get_minutes(SESSION_PHASE_SIT) == 20);
+  assert(phase_settings_get_minutes(SESSION_PHASE_STAND) == 35);
+  assert(phase_settings_get_minutes(SESSION_PHASE_MOVE) == 60);
+}
+
+static void test_phase_lengths_reset_keeps_haptic_pattern_and_running_phase(void) {
+  fake_reset();
+  assert(haptic_settings_set(HAPTIC_PATTERN_DOUBLE));
+  prv_set_minutes(20, 35, 60);
+  prv_start_session();
+  SessionView view = prv_view();
+  int64_t sit_deadline = view.record.deadline_utc;
+  WakeupId id = view.record.wakeup_id;
+  uint32_t generation = view.record.generation;
+  int schedules = fake_schedule_count;
+  int haptics = fake_haptic_count;
+
+  assert(phase_settings_reset());
+  view = prv_view();
+  assert(haptic_settings_get() == HAPTIC_PATTERN_DOUBLE);
+  assert(fake_haptic_count == haptics);
+  assert(view.record.deadline_utc == sit_deadline);
+  assert(view.record.wakeup_id == id && view.record.generation == generation);
+  assert(fake_schedule_count == schedules);
+
+  /* The defaults apply when the next phase starts. */
+  prv_advance_to_deadline_and_deliver();
+  view = prv_view();
+  assert(view.record.phase == SESSION_PHASE_STAND);
+  assert(view.record.deadline_utc == sit_deadline + 10 * 60);
+}
+
+static void test_phase_lengths_reset_keeps_paused_remaining_time(void) {
+  fake_reset();
+  prv_set_minutes(20, 35, 60);
+  prv_start_session();
+  fake_now += 5 * 60;
+  session_coordinator_pause();
+  fake_run_timers();
+  SessionView view = prv_view();
+  assert(view.record.lifecycle == SESSION_PAUSED);
+  int32_t remaining = view.record.remaining_seconds;
+  assert(remaining == 15 * 60);
+
+  assert(phase_settings_reset());
+  view = prv_view();
+  assert(view.record.lifecycle == SESSION_PAUSED);
+  assert(view.record.remaining_seconds == remaining);
+  session_coordinator_resume();
+  fake_run_timers();
+  assert(prv_view().record.deadline_utc == fake_now + remaining);
+
+  session_coordinator_timed_pause(5 * 60);
+  fake_run_timers();
+  assert(phase_settings_reset());
+  view = prv_view();
+  assert(view.record.lifecycle == SESSION_TIMED_PAUSED);
+  assert(view.record.remaining_seconds == remaining);
+  assert(view.record.pause_duration_seconds == 5 * 60);
+}
+
+static void test_phase_lengths_reset_persists_across_relaunch(void) {
+  fake_reset();
+  prv_set_minutes(20, 35, 60);
+  assert(phase_settings_reset());
+  prv_start_session();
+  assert(prv_view().record.deadline_utc == fake_now + 45 * 60);
+  session_coordinator_deinit();
+  session_coordinator_init();
+  fake_run_timers();
+  assert(prv_view().record.deadline_utc == fake_now + 45 * 60);
+  session_coordinator_stop();
+  fake_run_timers();
+  assert(phase_settings_get_minutes(SESSION_PHASE_SIT) == 45);
+  assert(phase_settings_get_minutes(SESSION_PHASE_STAND) == 10);
+  assert(phase_settings_get_minutes(SESSION_PHASE_MOVE) == 5);
+}
+
 static void test_phase_lengths_do_not_change_pause_choices_or_extend(void) {
   fake_reset();
   prv_set_minutes(60, 5, 5);
@@ -3895,6 +4005,11 @@ int main(void) {
   test_phase_lengths_persist_across_stop_start_and_relaunch();
   test_phase_lengths_overdue_recovery_uses_configured_cycle_sum();
   test_phase_lengths_do_not_change_pause_choices_or_extend();
+  test_phase_lengths_reset_restores_defaults_in_one_write();
+  test_phase_lengths_reset_failure_leaves_no_half_reset();
+  test_phase_lengths_reset_keeps_haptic_pattern_and_running_phase();
+  test_phase_lengths_reset_keeps_paused_remaining_time();
+  test_phase_lengths_reset_persists_across_relaunch();
   test_haptic_default_is_short_and_bad_values_fall_back();
   test_haptic_chosen_pattern_applies_to_every_request();
   test_haptic_pattern_is_silent_for_other_commands_and_persists();

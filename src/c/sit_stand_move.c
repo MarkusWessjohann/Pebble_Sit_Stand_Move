@@ -242,13 +242,20 @@ static const SessionPhase s_length_phases[LENGTH_ROW_COUNT] = {
   SESSION_PHASE_SIT, SESSION_PHASE_STAND, SESSION_PHASE_MOVE
 };
 
+/* The Reset row is last and restores the three lengths to 45/10/5. */
+#define RESET_ROW (PATTERN_COUNT + LENGTH_ROW_COUNT)
+
 static uint16_t prv_settings_num_rows(MenuLayer *menu_layer, uint16_t section_index,
                                       void *context) {
-  return PATTERN_COUNT + LENGTH_ROW_COUNT;
+  return RESET_ROW + 1;
 }
 
 static void prv_settings_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *cell_index,
                                   void *context) {
+  if (cell_index->row == RESET_ROW) {
+    menu_cell_basic_draw(ctx, cell_layer, "Reset", NULL, NULL);
+    return;
+  }
   if (cell_index->row >= PATTERN_COUNT) {
     int length_row = cell_index->row - PATTERN_COUNT;
     char title[16];
@@ -266,6 +273,13 @@ static void prv_settings_draw_row(GContext *ctx, const Layer *cell_layer, MenuIn
 
 static void prv_settings_select(MenuLayer *menu_layer, MenuIndex *cell_index, void *context) {
   (void)context;
+  if (cell_index->row == RESET_ROW) {
+    /* Like a length row: no preview, the window stays open, and a failed save leaves the old
+     * values shown. The haptic pattern is not touched. */
+    phase_settings_reset();
+    menu_layer_reload_data(menu_layer);
+    return;
+  }
   if (cell_index->row >= PATTERN_COUNT) {
     /* A length row steps in place: no preview, the window stays open, and a failed save leaves
      * the old value shown. */

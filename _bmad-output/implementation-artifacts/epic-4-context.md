@@ -8,7 +8,7 @@ The owner sets the length of Sit, Stand, and Move in the Settings window (5 to 6
 
 ## Stories
 
-- Story 4.1: Set the length of Sit, Stand, and Move in Settings
+- Story 4.1: Set the length of Sit, Stand, and Move in Settings (done)
 - Story 4.2: Reset the phase lengths to 45/10/5
 
 ## Requirements & Constraints
@@ -18,12 +18,13 @@ The owner sets the length of Sit, Stand, and Move in the Settings window (5 to 6
 - Lengths live in their own persistent key, separate from the haptic key and the versioned session record; the record schema does not change.
 - A changed length is read only when a phase starts: automatic transition, Skip, Start, and the full-length rebase on overdue recovery. A running phase keeps its deadline and Wakeup; a paused or timed-paused phase keeps its saved remaining time; nothing is rescheduled by a settings change.
 - Timed-pause choices (5, 10, 30) and Extend amounts are unchanged. The tally counts naturally completed phases regardless of length; skipped and in-progress phases stay excluded.
-- Settings window rows: the four haptic rows as today, then `Sit`, `Stand`, `Move` (Story 4.2 adds `Reset`). Each length row shows its value as text (`Sit 45 min`). Selecting a length row adds 5 minutes, wraps 60 to 5, saves, updates the row, and keeps the window open with no preview. A failed save leaves the old value shown and stored. Haptic rows behave as before (save, one preview, return).
+- Settings window rows: the four haptic rows as today, then `Sit`, `Stand`, `Move`, then `Reset` (Story 4.2). Each length row shows its value as text (`Sit 45 min`). Selecting a length row adds 5 minutes, wraps 60 to 5, saves, updates the row, and keeps the window open with no preview. A failed save leaves the old value shown and stored. Haptic rows behave as before (save, one preview, return).
 - Emulator evidence is recorded as emulator evidence, not physical-device evidence.
 
 ## Technical Decisions
 
 - The Session Coordinator stays the only owner of timing; the UI only writes the setting and never computes deadlines.
+- Lengths are one 3-byte record (Sit, Stand, Move) under key `0x5355` in `src/c/phase_settings.c`, validated per byte; one write replaces all three, so Reset cannot leave a half-reset state.
 - One lookup, `prv_duration()` in the coordinator, feeds cycle advance, Skip, Start, and recovery, and now reads the configured length.
 - Anything that assumes a 60-minute cycle must use the sum of the three configured lengths instead (the whole-cycle fast-forward in `prv_reconcile_phase`).
 - The host test harness compiles the coordinator and stores against Pebble stubs; the UI file is not compiled there, and the test persist stub must learn the new key.
@@ -35,5 +36,5 @@ The owner sets the length of Sit, Stand, and Move in the Settings window (5 to 6
 
 ## Cross-Story Dependencies
 
-- Story 4.2 builds on Story 4.1's persisted lengths and Settings rows. Story 4.1 stands alone.
+- Story 4.2 builds on Story 4.1's persisted lengths and Settings rows (done). `sit_stand_move.c` is not compiled by the host harness.
 - The PRD (section 7.2) and architecture spine (AD-6, "Default durations" convention) still say lengths are fixed; they are not yet amended for Epic 4.

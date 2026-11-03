@@ -88,3 +88,9 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-1-set-the-length-of-sit-stand-and-move-in-settings.md`
   summary: Amend the PRD (section 7.2, out of scope: "User-configurable default Phase lengths") and the architecture spine (AD-6 and the "Default durations" convention) so they no longer say the lengths are fixed.
   evidence: Epic 4 and `epics.md` (FR12 to FR15, NFR7 amended) allow configurable lengths, but the PRD and architecture still state the opposite, so the planning documents contradict each other.
+
+## Deferred from: code review of spec-4-2-reset-the-phase-lengths-to-45-10-5 (2026-11-03)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-2-reset-the-phase-lengths-to-45-10-5.md`
+  summary: On the emery emulator and Pebble Time 2, check the eight-row Settings window: `Reset` is the last row and fits, selecting it restores 45/10/5 in the three length rows, the window stays open, no preview plays, and the haptic pattern mark does not move.
+  evidence: `sit_stand_move.c` is not compiled by the host harness and the sandbox has no Pebble SDK. Breaking `RESET_ROW`, the row count, the reload, or the stay-open behavior keeps every host test green. Same gap as Stories 1.6, 1.7, 2.1, 3.1, 3.2, and 4.1.
