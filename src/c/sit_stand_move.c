@@ -99,6 +99,9 @@ static void prv_render(void) {
     snprintf(s_countdown_text, sizeof(s_countdown_text), "%02d:%02d",
              (int)(view.remaining_seconds / 60), (int)(view.remaining_seconds % 60));
     s_controls_text[0] = '\0';
+    if (view.record.lifecycle == SESSION_RUNNING) {
+      snprintf(s_controls_text, sizeof(s_controls_text), "TOP +5 BOTTOM +10");
+    }
     if (view.record.lifecycle == SESSION_PAUSED) {
       snprintf(s_phase_text, sizeof(s_phase_text), "PAUSED: %s", prv_phase_name(view.record.phase));
       text_layer_set_font(s_phase_layer, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD));

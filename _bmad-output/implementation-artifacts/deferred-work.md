@@ -39,3 +39,9 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-1-6-skip-the-active-phase.md`
   summary: On Pebble Time 2, check what the owner feels when Skip is tapped at a due phase deadline, which requests two back-to-back haptics (the reconciled transition, then Skip).
   evidence: Owner decided on 2026-11-03 to keep this behavior (AC3 reconciles first, then applies Skip to the resulting phase, so Skip lands one phase past the one displayed). The race lasts under a second in the foreground. Whether the watch plays, merges or drops the second pulse is unverified.
+
+## Deferred from: code review of spec-1-7-extend-the-active-phase (2026-11-03)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-7-extend-the-active-phase.md`
+  summary: Exercise the running top/bottom Extend presses, the `TOP +5 BOTTOM +10` label fit and legibility, and the Extend Wakeup on the SDK or Pebble Time 2.
+  evidence: The host harness does not compile `sit_stand_move.c`; the label, click handlers and the 17-character line in the 14pt controls layer are inspected only. Story 1.8 owns UI and device verification.

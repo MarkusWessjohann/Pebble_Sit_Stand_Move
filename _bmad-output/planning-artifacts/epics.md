@@ -164,7 +164,7 @@ So that I can control reminders directly from Pebble Time 2.
 
 **Requirements:** FR1, NFR1, NFR4–NFR5, NFR7–NFR8, UX-DR1–UX-DR5, UX-DR8–UX-DR13.
 
-**Dependency:** Story 1.1's pinned toolchain and reproducible build/install readiness must be complete before implementation stories begin. On 2026-10-31, the owner authorized Stories 1.2 and 1.3 to proceed while Story 1.1 remains open; this waiver applies only to those stories, does not satisfy or close Story 1.1, and does not waive readiness for later implementation stories. On 2026-11-03, the owner extended the waiver to Story 1.6 while Story 1.1 remains open; Stories 1.4 and 1.5 were implemented while Story 1.1 was open. The extension does not satisfy or close Story 1.1 and does not cover Stories 1.7 and 1.8. Physical-device acceptance is deferred to Story 1.8 and does not block this story.
+**Dependency:** Story 1.1's pinned toolchain and reproducible build/install readiness must be complete before implementation stories begin. On 2026-10-31, the owner authorized Stories 1.2 and 1.3 to proceed while Story 1.1 remains open; this waiver applies only to those stories, does not satisfy or close Story 1.1, and does not waive readiness for later implementation stories. On 2026-11-03, the owner extended the waiver to Story 1.6 while Story 1.1 remains open; Stories 1.4 and 1.5 were implemented while Story 1.1 was open. On 2026-11-03, the owner extended the waiver to Story 1.7 while Story 1.1 remains open. These extensions do not satisfy or close Story 1.1 and do not cover Story 1.8. Physical-device acceptance is deferred to Story 1.8 and does not block this story.
 
 **Acceptance Criteria:**
 

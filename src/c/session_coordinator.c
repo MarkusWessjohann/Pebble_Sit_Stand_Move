@@ -9,6 +9,8 @@ enum {
   SESSION_PAUSE_5_SECONDS = 5 * 60,
   SESSION_PAUSE_10_SECONDS = 10 * 60,
   SESSION_PAUSE_30_SECONDS = 30 * 60,
+  SESSION_EXTEND_TOP_SECONDS = 5 * 60,
+  SESSION_EXTEND_BOTTOM_SECONDS = 10 * 60,
   SESSION_QUEUE_SIZE = 8,
 };
 
@@ -36,6 +38,7 @@ typedef struct {
   int32_t cookie;
   uint16_t row;
   int32_t duration_seconds;
+  int32_t extend_seconds;
   bool longer;
   bool early_resume;
   bool menu_resume;
@@ -446,6 +449,49 @@ static void prv_skip(void) {
   }
   s_error = SESSION_ERROR_NONE;
   prv_request_haptic();
+}
+
+static void prv_extend(int32_t seconds) {
+  time_t now;
+  if (seconds <= 0 || s_record.lifecycle != SESSION_RUNNING) {
+    return;
+  }
+  if (!prv_read_utc(&now)) {
+    prv_invalid_time();
+    return;
+  }
+  if (!prv_reconcile_before_command(now) || s_record.lifecycle != SESSION_RUNNING) {
+    return;
+  }
+  if (s_record.deadline_utc + seconds > INT32_MAX) {
+    s_error = SESSION_ERROR_CLOCK;
+    return;
+  }
+
+  SessionRecord candidate = s_record;
+  WakeupId old_id = candidate.wakeup_id;
+  candidate.deadline_utc += seconds;
+  prv_reset_tally_day(&candidate, prv_local_day(now));
+  if (!prv_next_generation(candidate.generation, &candidate.generation)) {
+    s_error = SESSION_ERROR_STORAGE;
+    return;
+  }
+  WakeupId candidate_id;
+  if (!prv_schedule(&candidate, &candidate_id)) {
+    s_error = SESSION_ERROR_WAKEUP;
+    return;
+  }
+  candidate.wakeup_id = candidate_id;
+  if (!session_store_save(&candidate)) {
+    wakeup_cancel(candidate_id);
+    prv_commit_failure(true);
+    return;
+  }
+  s_record = candidate;
+  if (old_id >= 0) {
+    wakeup_cancel(old_id);
+  }
+  s_error = SESSION_ERROR_NONE;
 }
 
 static void prv_stop(void) {
@@ -874,7 +920,12 @@ static void prv_process(const SessionEvent *event) {
     return;
   }
   if (event->type == EVENT_TOP_CONTROL || event->type == EVENT_BOTTOM_CONTROL) {
-    prv_change_timed_pause(event->type == EVENT_BOTTOM_CONTROL);
+    if (event->extend_seconds) {
+      /* Meaning is fixed at press time: an Extend press never becomes a break-length change. */
+      prv_extend(event->extend_seconds);
+    } else {
+      prv_change_timed_pause(event->type == EVENT_BOTTOM_CONTROL);
+    }
     return;
   }
   if (event->type == EVENT_DAY_ROLLOVER) {
@@ -982,17 +1033,19 @@ bool session_coordinator_middle_control(void) {
 }
 
 bool session_coordinator_top_control(void) {
-  if (s_record.lifecycle != SESSION_TIMED_PAUSED) {
+  if (s_record.lifecycle != SESSION_RUNNING && s_record.lifecycle != SESSION_TIMED_PAUSED) {
     return false;
   }
-  return prv_enqueue((SessionEvent){ .type = EVENT_TOP_CONTROL });
+  return prv_enqueue((SessionEvent){ .type = EVENT_TOP_CONTROL,
+      .extend_seconds = s_record.lifecycle == SESSION_RUNNING ? SESSION_EXTEND_TOP_SECONDS : 0 });
 }
 
 bool session_coordinator_bottom_control(void) {
-  if (s_record.lifecycle != SESSION_TIMED_PAUSED) {
+  if (s_record.lifecycle != SESSION_RUNNING && s_record.lifecycle != SESSION_TIMED_PAUSED) {
     return false;
   }
-  return prv_enqueue((SessionEvent){ .type = EVENT_BOTTOM_CONTROL });
+  return prv_enqueue((SessionEvent){ .type = EVENT_BOTTOM_CONTROL,
+      .extend_seconds = s_record.lifecycle == SESSION_RUNNING ? SESSION_EXTEND_BOTTOM_SECONDS : 0 });
 }
 
 void session_coordinator_skip(void) {
