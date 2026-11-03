@@ -108,3 +108,76 @@ These sandbox checks verify the host-side test suite and lockfile only. The CLI 
 **Story 1.1 decision:** In progress, not done. The project pins Pebble Tool 5.0.40, Python 3.13.5, and SDK 4.33.1; the documented wrapper requires 4.33.1 to be active before project build/install commands run. The owner supplied external-host output showing global Pebble Tool 5.1.2 with SDK 4.33.1 active, reports clean/build/install success, and confirms the separate phase-deadline and timed-pause emulator tests were run and worked. Full command output, locked-CLI-selected SDK/toolchain path, artifact identity, tested emulator revision/version, callback/haptic-request/foreground observations, and timing remain to be captured. The supplied emulator invocation is `pebble install --emulator emery --logs`; its result/logs were not included. The emulator reports refer to a harness no longer in the tree and predating the wrapper, so they cannot be reproduced from HEAD without checking out `ef33c2f`. The wrapper's SDK check has stubbed unit tests only and has not been tested against actual output from the project-locked CLI. CLI and emulator are unavailable in this sandbox but reportedly work on the external host. On 2026-11-02, `sh scripts/test.sh` passed the C coordinator and all 4 wrapper unit tests, and `uv lock --check --offline` passed; neither result substitutes for Pebble host/emulator evidence.
 
 **Story 1.8 decision:** Pending. No physical-device acceptance is asserted. Run the finished-app checks after Stories 1.2–1.7, including a complete 45/10/5 cycle and separate background phase/timed-pause Wakeup tests. The project owner reviews battery/reliability evidence; inconclusive or unacceptable results keep the gate open. Do not release until required checks pass or the owner resolves an unsupported requirement.
+
+## Owner-reported locked-CLI output (2026-11-03)
+
+Source: owner-reported, raw output pasted into the session. Not run in this sandbox. Run from the project root against HEAD `fe2830d` or earlier; the exact commit was not stated.
+
+```text
+$ uv run --locked pebble --version
+Pebble Tool v5.0.40 (active SDK: v4.33.1)
+
+$ uv run --locked pebble sdk list        (run twice, identical output)
+Installed SDKs:
+4.33.1 (active)
+
+Available SDKs:
+4.4
+4.5
+4.9.127
+4.9.148
+4.9.169
+4.17
+```
+
+What this establishes: the project-locked CLI is Pebble Tool 5.0.40 and SDK 4.33.1 is active in the owner's environment, matching `pyproject.toml`, `uv.lock` and `.pebble-sdk-version`. The output shape is `Installed SDKs:` on one line and `4.33.1 (active)` on the next, which `scripts/pebble.py` accepts.
+
+What it does not establish: the SDK/toolchain path a build selects (`build/config.log`), a clean or repeated build/install, artifact identity, or any emulator Wakeup observation. AC1 stays open for the SDK path; AC2 and AC3 are unchanged.
+
+## Owner-reported build configuration (2026-11-03)
+
+Source: owner-reported, contents of `build/config.log` pasted into the session. Not run in this sandbox. The commit built was not stated.
+
+| Item | Value in the log |
+|---|---|
+| Configured | `Tue Nov 3 11:26:53 2026`, waf 2.1.4 (abi 20) |
+| waf location | `~/Library/Application Support/Pebble SDK/SDKs/current/sdk-core/pebble/waf` |
+| Toolchain | `~/Library/Application Support/Pebble SDK/SDKs/4.33.1/toolchain/arm-none-eabi/bin` (`arm-none-eabi-gcc` 14.2.1 20241119, `arm-none-eabi-ar`) |
+| Moddable tools | `/var/tmp/pebble-sdk/SDKs/4.33.1/toolchain/moddable-tools` |
+| Platforms configured | gabbro, flint, emery, diorite, chalk, basalt, aplite (all seven in `package.json`) |
+| Pebble tool in PATH | `~/.local/share/uv/tools/pebble-tool/lib/python3.13/site-packages/pebble_tool/commands/sdk` |
+
+What this establishes: the SDK 4.33.1 toolchain path and compiler version a build selected on the owner's machine, and that the full build configures all seven platforms.
+
+What it does not establish: that the build ran under the project-locked Pebble Tool 5.0.40. The PATH entry above is the global uv tool install (`uv/tools/pebble-tool`); a locked run would show the project `.venv` instead. It also does not show that `SDKs/current` points at 4.33.1, and it holds no build, install, exit-code or artifact-hash evidence.
+
+To close this from the host, from the project root at HEAD:
+
+```sh
+git rev-parse HEAD
+uv run --locked python -c "import pebble_tool; print(pebble_tool.__file__)"
+ls -l "$HOME/Library/Application Support/Pebble SDK/SDKs/"
+uv run --locked python scripts/pebble.py clean
+uv run --locked python scripts/pebble.py build 2>&1 | tee build-1.log; echo "exit=${PIPESTATUS[0]}"
+grep -n "pebble_tool/commands/sdk" build/config.log | head -1
+shasum -a 256 build/*.pbw
+```
+
+Expect the `pebble_tool.__file__` path and the `config.log` PATH line to point into the project `.venv`.
+
+## Artifact hashes observed 2026-11-03 (AC2 artifact identity, not yet a reproducibility result)
+
+Three different SHA-256 values exist for `build/sit_stand_walk.pbw`. None is yet tied to a recorded commit and command sequence, so none establishes or disproves reproducibility.
+
+| Source | Evidence | `sit_stand_walk.pbw` SHA-256 |
+|---|---|---|
+| Earlier inspection (file) | Existing artifact, no build record | `066e3ee65a5741b9667305d87e8de7317b26063455fee9af39aa5d90b245f180` |
+| Owner-reported, pasted twice | `sha256sum build/*.pbw` on the owner's host; which build and commit were not stated | `6026475d41345d8884417f8a61c33b838e3ef90f288c8ab36cc3ed979dc3f464` |
+| Local (sandbox, shared workspace mount) | File in `build/`, 122380 bytes, zip entries stamped `11:34` (host local time); `build/config.log` says configured `11:34:13` | `de795b009659c8453abdcf9d39e7e8567b784dd83bb5cbd30c55d840f701959e` |
+
+Local observations of the 11:34 build, taken from the workspace without running Pebble commands: `appinfo.json` hash prefix `8313744f71e15887`; `build/emery/pebble-app.elf` prefix `fa44368f796971e5`; per-platform `pebble-app.bin` hash prefixes `aplite cd9a3ae3a935be36`, `basalt c8d2634b97f5f7c2`, `chalk fb1359e5c1f2caf6`, `diorite 916c397194ff619a`, `emery 32497340a9f1c3fe`, `flint 0304d02cdc9b9daa`, `gabbro 6fabf59a72933d5d`. The archive holds 22 files.
+
+What this does not show:
+- The owner's earlier `config.log` said configured `11:26:53`; the workspace log says `11:34:13`. So the owner's pasted log and the workspace build are different runs, and the owner's `6026475d...` does not match the workspace file. Whether it hashes the 11:26 build or another build is unknown.
+- A `.pbw` is a ZIP archive with per-entry timestamps, so byte-identical content can still hash differently between builds. That is a hypothesis, not a finding; comparing the per-platform `pebble-app.bin` hashes across two clean builds would test it. This bears on the open owner decision on what counts as artifact identity.
+- The `build/config.log` of the 11:34 build still puts `~/.local/share/uv/tools/pebble-tool/.../pebble_tool/commands/sdk` on PATH (14 matches) and no project `.venv`. Whether that proves the global tool ran, rather than the locked one, is unresolved, because Pebble Tool may add its own install directory to PATH. AC1 stays open.
