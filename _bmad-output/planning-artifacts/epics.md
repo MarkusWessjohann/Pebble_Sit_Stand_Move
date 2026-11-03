@@ -1,6 +1,6 @@
 ---
 status: final
-updated: 2026-10-31
+updated: 2026-11-03
 stepsCompleted:
   - step-01-validate-prerequisites
   - step-02-design-epics
@@ -103,6 +103,16 @@ UX-DR12: Use concise, neutral, functional labels and avoid promotional or motiva
 
 UX-DR13: Verify the app's display-safe layout and native control behavior on the target Pebble Time 2. Do not represent firmware-dependent Wakeup, haptic delivery, or app foregrounding as guaranteed before physical-device verification.
 
+**Epic 2 additions (2026-11-03, owner-requested UX change; supersede the conflicting wording in UX-DR3, UX-DR4, and UX-DR6 for the session view):**
+
+UX-DR14: Render the current wall-clock time and the daily Sit/Stand/Move tally in the native Gothic 24 text style (about 1.7x the previous Gothic 14; the nearest native size to the requested 50% increase), replacing the "small" treatment in UX-DR3 and UX-DR4. No custom or scaled font rendering.
+
+UX-DR15: The enlarged daily tally must fit the Pebble Time 2 display-safe area without clipping or truncation in every lifecycle state (inactive, running, `PAUSED`, `BREAK`, and error shown). The layout may stack or compact the tally; labels stay literal (`Sit`, `Stand`, `Move`) and counts stay textually identifiable.
+
+UX-DR16: Show each hardware-button label at the right screen edge, vertically level with its physical button, replacing the single centered `TOP … BOTTOM …` line. Top: `+5` while running, or the shorter alternative duration while timed-paused. Middle: the pause control, with `BREAK` while timed-paused and `PAUSED` while manually paused. Bottom: `+10` while running, or the longer alternative duration while timed-paused. This refines UX-DR6 and does not change button functions.
+
+UX-DR17: The active phase countdown remains the strongest visual element (UX-DR4) and the phase icon and name stay directly below it (UX-DR3). The content column narrows so it never overlaps the right-edge label column, and countdown, icon, phase name, tally, button labels, and error text do not overlap or clip. Verify on Pebble Time 2 hardware, with emulator evidence recorded separately.
+
 ### FR Coverage Map
 
 FR1: Epic 1 - Start and stop a session from the watch.
@@ -114,6 +124,13 @@ FR6: Epic 1 - Skip the active phase.
 FR7: Epic 1 - Extend the active phase by +5 or +10 minutes.
 FR8: Epic 1 - Verify the finished app on Pebble Time 2 before release.
 
+Epic 2 adds no FRs. It refines presentation requirements and covers the new UX design requirements:
+
+UX-DR14: Epic 2 - Story 2.1 - Time and tally at Gothic 24.
+UX-DR15: Epic 2 - Story 2.1 - Enlarged tally fits without clipping.
+UX-DR16: Epic 2 - Story 2.1 - Button labels at the right edge, level with the buttons.
+UX-DR17: Epic 2 - Story 2.1 - Countdown stays dominant; no overlap.
+
 ## Epic List
 
 ### Epic 1: Run and control a sit–stand–move session from the watch
@@ -121,6 +138,12 @@ FR8: Epic 1 - Verify the finished app on Pebble Time 2 before release.
 The owner can start and stop a session on Pebble Time 2, follow the repeating Sit/Stand/Move cycle, and manage it with pause, timed pause, skip, and extension controls. The watch shows the current phase and remaining time, and handles reminders and recovery according to the agreed timing rules. Pinned reproducible toolchain/build readiness is a pre-implementation gate; finished-app physical-device verification of Wakeup, haptic, app-foreground behavior, and UI is a pre-release gate in Story 1.8.
 
 **FRs covered:** FR1, FR2, FR3, FR4, FR5, FR6, FR7, FR8.
+
+### Epic 2: Make the session view easier to read at a glance
+
+The owner can read the current time and the daily tally more easily, and can see what each right-side hardware button does because its label sits next to that button. This epic changes layout and presentation only; session behavior, timing, and the coordinator are unchanged. It builds on Epic 1's session view and does not reopen Story 1.8.
+
+**FRs covered:** none new. Refines NFR8 and UX-DR3, UX-DR4, and UX-DR6; adds UX-DR14–UX-DR17.
 
 ## Epic 1: Run and control a sit–stand–move session from the watch
 
@@ -499,3 +522,61 @@ So that release is based on actual target-device acceptance rather than emulator
 **Given** any required physical acceptance check fails or remains unverified
 **When** results are reported
 **Then** record the limitation and evidence, keep Story 1.8 open, and block release until the product owner resolves the affected scope or acceptance; do not claim physical acceptance passed.
+
+## Epic 2: Make the session view easier to read at a glance
+
+The owner can read the current time and the daily tally more easily, and can see what each right-side hardware button does because its label sits next to that button. This epic changes layout and presentation only; session behavior, timing, and the coordinator are unchanged. It builds on Epic 1's session view and does not reopen Story 1.8.
+
+### Story 2.1: Enlarge the time and tally, and place button labels beside the buttons
+
+As the watch owner,
+I want the time and daily tally larger and each button's label next to that button,
+So that I can read the session view at a glance and know what each button does.
+
+**Requirements:** NFR8, UX-DR3, UX-DR4, UX-DR6, UX-DR11, UX-DR14–UX-DR17.
+
+**Dependencies:** Builds on the Epic 1 session view. Story 1.8 is closed by owner waiver and is not reopened. Physical-device legibility is an owner check and does not block this story; emulator evidence is recorded as emulator evidence.
+
+**Acceptance Criteria:**
+
+**Given** the session view is shown in any state
+**When** it renders the current wall-clock time
+**Then** the time uses the native Gothic 24 text style, not a custom or scaled font, and keeps its position at the top of the view.
+
+**Given** the session view is shown
+**When** it renders today's Sit/Stand/Move tally
+**Then** the tally uses Gothic 24, stays at the bottom of the view, and reads `Sit`, `Stand`, and `Move` with their counts, including two-digit counts.
+
+**Given** the enlarged tally and the optional error line
+**When** the view is shown while inactive, running, `PAUSED`, or `BREAK`, with and without an error
+**Then** nothing is clipped, truncated, or overlapping, and the error text stays visible and readable.
+
+**Given** a session is running
+**When** the session view is shown
+**Then** `+5` appears at the right edge level with the top button, a pause label level with the middle button, and `+10` level with the bottom button, and the centered `TOP … BOTTOM …` line is no longer shown.
+
+**Given** a session is timed-paused
+**When** the session view is shown
+**Then** the top label shows the shorter alternative duration, the middle label shows `BREAK`, and the bottom label shows the longer alternative, following the Story 1.5 mapping (for 30 active, top 5 and bottom 10).
+
+**Given** a session is manually paused
+**When** the session view is shown
+**Then** the middle label shows `PAUSED`, the frozen phase and remaining time stay visible, and no `+5` or `+10` label is shown because those buttons do not act in that state.
+
+**Given** no session is active
+**When** the session view is shown
+**Then** no button labels are shown.
+
+**Given** the label column is at the right edge
+**When** the content column is laid out
+**Then** the countdown, phase icon, phase name, and tally are narrowed or placed so none overlaps the label column; the countdown remains the strongest element and the icon and name remain directly below it.
+
+**Given** the layout changes
+**When** the session is used
+**Then** hardware button functions, menu behavior, coordinator logic, and persistence are unchanged, and the existing tests still pass.
+
+**Given** the new layout is built
+**When** it is checked on the emulator and, if available, on Pebble Time 2
+**Then** evidence for each state is recorded with its source; emulator results are not presented as physical-device results, and any unverified state is stated.
+
+`DESIGN.md` and `EXPERIENCE.md` are updated in the same change so the UX contract matches the new layout.

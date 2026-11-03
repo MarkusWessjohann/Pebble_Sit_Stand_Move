@@ -2,7 +2,7 @@
 title: Sit Stand Go — Watch Experience
 status: final
 created: 2026-10-23
-updated: 2026-10-31
+updated: 2026-11-03
 sources:
   - ../../briefs/brief-sit_stand_go-2026-10-21/brief.md
   - ../../prds/prd-sit_stand_go-2026-10-21/prd.md
@@ -45,10 +45,10 @@ Behavioral rules; visual placement lives in `DESIGN.md` → Components.
 | Component | Use | Behavioral rules |
 |---|---|---|
 | Session view | All lifecycle states | Render coordinator state; never own or advance the timer. Visual specification: `DESIGN.md` → Session view. |
-| Session time | Session view | Displays current watch time, small at top. Exact time format is [ASSUMPTION] native/local watch format. Visual specification: `DESIGN.md` → Session time. |
+| Session time | Session view | Displays current watch time at top, at secondary size (Gothic 24). Exact time format is [ASSUMPTION] native/local watch format. Visual specification: `DESIGN.md` → Session time. |
 | Phase remaining | Session view | Display the derived remaining value for the current lifecycle state. Visual specification: `DESIGN.md` → Phase remaining. |
 | Phase icon and name | Session view | Identify active `Sit`, `Stand`, or `Move`; pair a monochrome chair, standing-person, or moving-person icon with readable phase text directly below the countdown. Text is authoritative. Visual specification: `DESIGN.md` → Phase icon and name. |
-| Day tally | Session view | Small bottom line gives naturally completed phase totals for Sit, Stand, and Move across sessions during the watch's local calendar day. A skipped phase is excluded. In-progress phases are not counted. Persist today's totals locally across app restarts and reset them at local midnight. Visual specification: `DESIGN.md` → Day tally. |
+| Day tally | Session view | Bottom tally at secondary size (Gothic 24) gives naturally completed phase totals for Sit, Stand, and Move across sessions during the watch's local calendar day. A skipped phase is excluded. In-progress phases are not counted. Persist today's totals locally across app restarts and reset them at local midnight. Visual specification: `DESIGN.md` → Day tally. |
 | Top hardware button | Session view | See the running and timed-pause control rules in Interaction Primitives. Visual specification: `DESIGN.md` → Top hardware button. |
 | Middle hardware button | Session view | See the running, manual-pause, and timed-pause control rules in Interaction Primitives. Visual specification: `DESIGN.md` → Middle hardware button. |
 | Bottom hardware button | Session view | See the running and timed-pause control rules in Interaction Primitives. Visual specification: `DESIGN.md` → Bottom hardware button. |
