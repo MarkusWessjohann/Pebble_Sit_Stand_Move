@@ -27,6 +27,7 @@ typedef enum {
   EVENT_MIDDLE_CONTROL,
   EVENT_TOP_CONTROL,
   EVENT_BOTTOM_CONTROL,
+  EVENT_SKIP,
 } SessionEventType;
 
 typedef struct {
@@ -396,6 +397,57 @@ static void prv_change_timed_pause(bool longer) {
   s_error = SESSION_ERROR_NONE;
 }
 
+static void prv_skip(void) {
+  time_t now;
+  if (s_record.lifecycle != SESSION_RUNNING && s_record.lifecycle != SESSION_PAUSED &&
+      s_record.lifecycle != SESSION_TIMED_PAUSED) {
+    return;
+  }
+  if (!prv_read_utc(&now)) {
+    prv_invalid_time();
+    return;
+  }
+  SessionPhase next = prv_next_phase(s_record.phase);
+  int32_t duration = prv_duration(next);
+  if ((uint64_t)now > (uint64_t)INT32_MAX - (uint32_t)duration) {
+    s_error = SESSION_ERROR_CLOCK;
+    return;
+  }
+
+  SessionRecord candidate = s_record;
+  WakeupId old_id = candidate.wakeup_id;
+  candidate.lifecycle = SESSION_RUNNING;
+  candidate.phase = next;
+  candidate.deadline_utc = (int64_t)now + duration;
+  candidate.remaining_seconds = 0;
+  candidate.pause_deadline_utc = 0;
+  candidate.pause_duration_seconds = 0;
+  prv_reset_tally_day(&candidate, prv_local_day(now));
+  if (!prv_next_generation(candidate.generation, &candidate.generation)) {
+    s_error = SESSION_ERROR_STORAGE;
+    return;
+  }
+  candidate.haptic_generation = candidate.generation;
+  candidate.wakeup_id = (WakeupId)-1;
+  WakeupId candidate_id;
+  if (!prv_schedule(&candidate, &candidate_id)) {
+    s_error = SESSION_ERROR_WAKEUP;
+    return;
+  }
+  candidate.wakeup_id = candidate_id;
+  if (!session_store_save(&candidate)) {
+    wakeup_cancel(candidate_id);
+    prv_commit_failure(true);
+    return;
+  }
+  s_record = candidate;
+  if (old_id >= 0) {
+    wakeup_cancel(old_id);
+  }
+  s_error = SESSION_ERROR_NONE;
+  prv_request_haptic();
+}
+
 static void prv_stop(void) {
   if (s_record.lifecycle != SESSION_RUNNING && s_record.lifecycle != SESSION_PAUSED &&
       s_record.lifecycle != SESSION_TIMED_PAUSED) {
@@ -751,7 +803,8 @@ static void prv_process(const SessionEvent *event) {
                     event->type == EVENT_STOP || event->type == EVENT_TIMED_PAUSE ||
                     event->type == EVENT_CHANGE_TIMED_PAUSE ||
                     event->type == EVENT_MIDDLE_CONTROL ||
-                    event->type == EVENT_TOP_CONTROL || event->type == EVENT_BOTTOM_CONTROL;
+                    event->type == EVENT_TOP_CONTROL || event->type == EVENT_BOTTOM_CONTROL ||
+                    event->type == EVENT_SKIP;
   bool is_stop = event->type == EVENT_STOP ||
                  (event->type == EVENT_MENU_SELECT && event->row == 2);
   bool active = s_record.lifecycle == SESSION_RUNNING ||
@@ -790,6 +843,8 @@ static void prv_process(const SessionEvent *event) {
       prv_resume();
     } else if (event->row == 0 && s_record.lifecycle == SESSION_TIMED_PAUSED) {
       prv_resume();
+    } else if (event->row == 1) {
+      prv_skip();
     } else if (event->row == 2 && (s_record.lifecycle == SESSION_RUNNING ||
                                    s_record.lifecycle == SESSION_PAUSED ||
                                    s_record.lifecycle == SESSION_TIMED_PAUSED)) {
@@ -828,7 +883,9 @@ static void prv_process(const SessionEvent *event) {
     }
     return;
   }
-  if (event->type == EVENT_START) {
+  if (event->type == EVENT_SKIP) {
+    prv_skip();
+  } else if (event->type == EVENT_START) {
     prv_start();
   } else if (event->type == EVENT_PAUSE) {
     prv_pause();
@@ -936,6 +993,10 @@ bool session_coordinator_bottom_control(void) {
     return false;
   }
   return prv_enqueue((SessionEvent){ .type = EVENT_BOTTOM_CONTROL });
+}
+
+void session_coordinator_skip(void) {
+  prv_enqueue((SessionEvent){ .type = EVENT_SKIP });
 }
 
 void session_coordinator_stop(void) {

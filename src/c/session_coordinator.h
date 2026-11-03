@@ -27,6 +27,7 @@ void session_coordinator_change_timed_pause(bool longer);
 bool session_coordinator_middle_control(void);
 bool session_coordinator_top_control(void);
 bool session_coordinator_bottom_control(void);
+void session_coordinator_skip(void);
 void session_coordinator_stop(void);
 void session_coordinator_select_menu_row(uint16_t row);
 void session_coordinator_recover(void);

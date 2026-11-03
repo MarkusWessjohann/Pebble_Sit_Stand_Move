@@ -30,3 +30,9 @@
 ## Deferred from: code review of spec-1-5-take-and-end-a-timed-pause (2026-11-02)
 
 - PauseEnd (on-time and overdue recovery) requests a haptic but no explicit app-open/foreground call. The Pebble Wakeup launch opens the app and the SDK has no separate foreground call; Story 1.3 accepted the same wording. Verify on Pebble Time 2 in Story 1.8 whether a PauseEnd Wakeup raises the app from the menu window and from the background.
+
+## Deferred from: code review of spec-1-6-skip-the-active-phase (2026-11-03)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-6-skip-the-active-phase.md`
+  summary: Exercise the Skip menu row dispatch, resulting view, and Skip haptic from PAUSED, BREAK, and running states on the SDK or Pebble Time 2.
+  evidence: The host harness does not compile `sit_stand_move.c`; removing the early return in `prv_menu_select` and the menu-to-coordinator dispatch are covered only by coordinator-level tests. Story 1.8 owns UI and haptic verification.

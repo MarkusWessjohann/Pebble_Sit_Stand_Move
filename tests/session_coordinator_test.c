@@ -1043,48 +1043,339 @@ static void test_menu_row_contract(void) {
   view = prv_view();
   assert(view.record.lifecycle == SESSION_RUNNING);
 
-  /* Skip (row 1) stays inert while running until Story 1.6. */
+  /* Skip (row 1) advances Sit to Stand while running, with one haptic. */
   int writes = s_write_attempts;
-  int schedules = fake_schedule_count;
+  WakeupId sit_id = view.record.wakeup_id;
   session_coordinator_select_menu_row(1);
   fake_run_timers();
-  SessionView inert = prv_view();
-  assert(memcmp(&inert.record, &view.record, sizeof(view.record)) == 0);
-  assert(inert.error == view.error);
-  assert(s_write_attempts == writes);
-  assert(fake_schedule_count == schedules);
-  assert(fake_cancel_count == cancels);
+  SessionView skipped = prv_view();
+  assert(skipped.record.lifecycle == SESSION_RUNNING);
+  assert(skipped.record.phase == SESSION_PHASE_STAND);
+  assert(skipped.record.deadline_utc == fake_now + 10 * 60);
+  assert(skipped.record.generation == view.record.generation + 1);
+  assert(skipped.record.wakeup_id == fake_last_scheduled_id);
+  assert(skipped.record.sit_count == 0);
+  assert(s_write_attempts == writes + 1);
+  assert(fake_schedule_count == 2);
+  assert(fake_cancel_count == cancels + 1);
+  assert(fake_last_cancelled_id == sit_id);
+  assert(fake_haptic_count == 1);
 
   session_coordinator_select_menu_row(0);
   fake_run_timers();
   SessionView after = prv_view();
   assert(after.record.lifecycle == SESSION_PAUSED);
-  assert(after.record.phase == view.record.phase);
-  assert(after.record.remaining_seconds == 45 * 60);
+  assert(after.record.phase == SESSION_PHASE_STAND);
+  assert(after.record.remaining_seconds == 10 * 60);
   assert(after.record.deadline_utc == 0);
   assert(after.record.wakeup_id == (WakeupId)-1);
-  assert(after.record.generation == view.record.generation + 1);
-  assert(fake_schedule_count == 1);
-  assert(fake_cancel_count == cancels + 1);
-  assert(s_write_attempts == writes + 1);
-  assert(fake_haptic_count == 0);
+  assert(after.record.generation == skipped.record.generation + 1);
+  assert(fake_schedule_count == 2);
+  assert(fake_cancel_count == cancels + 2);
+  assert(s_write_attempts == writes + 2);
+  assert(fake_haptic_count == 1);
 
-  /* ... and while paused. */
-  writes = s_write_attempts;
+  /* ... and from paused it leaves the pause, running Move at its full default duration. */
   session_coordinator_select_menu_row(1);
-  fake_run_timers();
-  inert = prv_view();
-  assert(memcmp(&inert.record, &after.record, sizeof(after.record)) == 0);
-  assert(s_write_attempts == writes);
-
-  session_coordinator_select_menu_row(0);
   fake_run_timers();
   after = prv_view();
   assert(after.record.lifecycle == SESSION_RUNNING);
-  assert(after.record.phase == view.record.phase);
-  assert(after.record.deadline_utc == fake_now + 45 * 60);
+  assert(after.record.phase == SESSION_PHASE_MOVE);
+  assert(after.record.deadline_utc == fake_now + 5 * 60);
+  assert(after.record.remaining_seconds == 0);
   assert(after.record.wakeup_id == fake_last_scheduled_id);
-  assert(fake_schedule_count == 2);
+  assert(fake_schedule_count == 3);
+  assert(fake_haptic_count == 2);
+}
+
+static void test_skip_cycles_phases_without_counting_and_ignores_stale_callback(void) {
+  fake_reset();
+  prv_start_session();
+  SessionView view = prv_view();
+  WakeupId sit_id = view.record.wakeup_id;
+  int32_t sit_cookie = (int32_t)view.record.generation;
+  fake_now += 100;
+  session_coordinator_skip();
+  fake_run_timers();
+  view = prv_view();
+  assert(view.record.phase == SESSION_PHASE_STAND);
+  assert(view.record.deadline_utc == fake_now + 10 * 60);
+  assert(view.record.generation == (uint32_t)sit_cookie + 1);
+  assert(view.record.haptic_generation == view.record.generation);
+  assert(view.record.sit_count == 0 && view.record.stand_count == 0 && view.record.move_count == 0);
+  assert(fake_haptic_count == 1);
+  assert(fake_last_cancelled_id == sit_id);
+
+  /* A callback for the skipped phase is ignored. */
+  fake_deliver_wakeup(sit_id, sit_cookie);
+  assert(prv_view().record.phase == SESSION_PHASE_STAND);
+  assert(fake_haptic_count == 1);
+
+  fake_now += 7;
+  session_coordinator_skip();
+  fake_run_timers();
+  view = prv_view();
+  assert(view.record.phase == SESSION_PHASE_MOVE);
+  assert(view.record.deadline_utc == fake_now + 5 * 60);
+  assert(fake_haptic_count == 2);
+
+  session_coordinator_skip();
+  fake_run_timers();
+  view = prv_view();
+  assert(view.record.phase == SESSION_PHASE_SIT);
+  assert(view.record.deadline_utc == fake_now + 45 * 60);
+  assert(view.record.wakeup_id == fake_last_scheduled_id);
+  assert(fake_last_scheduled_deadline == view.record.deadline_utc);
+  assert(view.record.sit_count == 0 && view.record.stand_count == 0 && view.record.move_count == 0);
+  assert(fake_haptic_count == 3);
+  assert(view.error == SESSION_ERROR_NONE);
+}
+
+static void test_skip_reconciles_due_deadline_first(void) {
+  fake_reset();
+  prv_start_session();
+  SessionView view = prv_view();
+  fake_now = (time_t)view.record.deadline_utc;
+  session_coordinator_skip();
+  fake_run_timers();
+  view = prv_view();
+  /* Due Sit completes (counted) into Stand, then Skip moves on from Stand to Move. */
+  assert(view.record.phase == SESSION_PHASE_MOVE);
+  assert(view.record.deadline_utc == fake_now + 5 * 60);
+  assert(view.record.sit_count == 1);
+  assert(view.record.stand_count == 0);
+  assert(view.record.move_count == 0);
+
+  /* A due timed-pause end is reconciled first, then Skip applies to the resumed phase. */
+  fake_reset();
+  prv_start_session();
+  session_coordinator_timed_pause(5 * 60);
+  fake_run_timers();
+  view = prv_view();
+  fake_now = (time_t)view.record.pause_deadline_utc;
+  session_coordinator_skip();
+  fake_run_timers();
+  view = prv_view();
+  assert(view.record.lifecycle == SESSION_RUNNING);
+  assert(view.record.phase == SESSION_PHASE_STAND);
+  assert(view.record.deadline_utc == fake_now + 10 * 60);
+  assert(view.record.sit_count == 0);
+
+  /* If the due reconcile fails, Skip is dropped. */
+  fake_reset();
+  prv_start_session();
+  view = prv_view();
+  fake_now = (time_t)view.record.deadline_utc;
+  fake_fail_schedule = true;
+  session_coordinator_skip();
+  fake_run_timers();
+  view = prv_view();
+  assert(view.record.phase == SESSION_PHASE_SIT);
+  assert(view.record.sit_count == 0);
+  assert(view.error == SESSION_ERROR_WAKEUP);
+  assert(fake_haptic_count == 0);
+}
+
+static void test_skip_from_paused_and_timed_paused_starts_running_phase(void) {
+  fake_reset();
+  prv_start_session();
+  fake_now += 60;
+  session_coordinator_pause();
+  fake_run_timers();
+  SessionView view = prv_view();
+  assert(view.record.lifecycle == SESSION_PAUSED);
+  session_coordinator_skip();
+  fake_run_timers();
+  view = prv_view();
+  assert(view.record.lifecycle == SESSION_RUNNING);
+  assert(view.record.phase == SESSION_PHASE_STAND);
+  assert(view.record.deadline_utc == fake_now + 10 * 60);
+  assert(view.record.remaining_seconds == 0);
+  assert(view.record.pause_deadline_utc == 0 && view.record.pause_duration_seconds == 0);
+  assert(view.record.wakeup_id == fake_last_scheduled_id);
+  assert(view.record.sit_count == 0);
+  assert(fake_haptic_count == 1);
+
+  fake_reset();
+  prv_start_session();
+  fake_now += 60;
+  session_coordinator_timed_pause(10 * 60);
+  fake_run_timers();
+  view = prv_view();
+  WakeupId pause_id = view.record.wakeup_id;
+  int32_t pause_cookie = (int32_t)view.record.generation;
+  int cancels = fake_cancel_count;
+  fake_now += 30;
+  session_coordinator_skip();
+  fake_run_timers();
+  view = prv_view();
+  assert(view.record.lifecycle == SESSION_RUNNING);
+  assert(view.record.phase == SESSION_PHASE_STAND);
+  assert(view.record.deadline_utc == fake_now + 10 * 60);
+  assert(view.record.remaining_seconds == 0);
+  assert(view.record.pause_deadline_utc == 0 && view.record.pause_duration_seconds == 0);
+  assert(fake_cancel_count == cancels + 1);
+  assert(fake_last_cancelled_id == pause_id);
+  assert(fake_haptic_count == 1);
+
+  /* A later pause-end callback does nothing. */
+  fake_deliver_wakeup(pause_id, pause_cookie);
+  view = prv_view();
+  assert(view.record.phase == SESSION_PHASE_STAND);
+  assert(view.record.deadline_utc == fake_now + 10 * 60);
+  assert(fake_haptic_count == 1);
+}
+
+static void test_skip_is_noop_while_inactive(void) {
+  fake_reset();
+  session_coordinator_init();
+  fake_run_timers();
+  session_coordinator_skip();
+  fake_run_timers();
+  assert(prv_view().record.lifecycle == SESSION_INACTIVE);
+  assert(s_write_attempts == 0);
+  assert(fake_schedule_count == 0);
+  assert(fake_haptic_count == 0);
+}
+
+static void test_skip_failures_retain_committed_state(void) {
+  for (int lifecycle = 0; lifecycle < 2; ++lifecycle) {
+    for (int failure = 0; failure < 2; ++failure) {
+      fake_reset();
+      prv_start_session();
+      if (lifecycle) {
+        session_coordinator_timed_pause(5 * 60);
+        fake_run_timers();
+      }
+      (void)prv_view();
+      fake_run_timers();
+      SessionView committed = prv_view();
+      int cancels = fake_cancel_count;
+      fake_fail_schedule = failure == 0;
+      fake_fail_write = failure == 1;
+      session_coordinator_skip();
+      fake_run_timers();
+      SessionView view = prv_view();
+      assert(memcmp(&view.record, &committed.record, sizeof(view.record)) == 0);
+      assert(view.error == (failure == 0 ? SESSION_ERROR_WAKEUP : SESSION_ERROR_STORAGE));
+      assert(fake_haptic_count == 0);
+      /* Only a storage failure cancels (the candidate); the committed Wakeup is kept. */
+      assert(fake_cancel_count == cancels + (failure == 1 ? 1 : 0));
+      assert(fake_last_cancelled_id != committed.record.wakeup_id);
+    }
+  }
+
+  /* Paused: committed pause is retained on failure. */
+  fake_reset();
+  prv_start_session();
+  session_coordinator_pause();
+  fake_run_timers();
+  (void)prv_view();
+  fake_run_timers();
+  SessionView committed = prv_view();
+  fake_fail_write = true;
+  session_coordinator_skip();
+  fake_run_timers();
+  SessionView view = prv_view();
+  assert(memcmp(&view.record, &committed.record, sizeof(view.record)) == 0);
+  assert(view.error == SESSION_ERROR_STORAGE);
+  assert(fake_haptic_count == 0);
+}
+
+static void test_skip_invalid_utc_preserves_committed_state(void) {
+  fake_reset();
+  prv_start_session();
+  (void)prv_view();
+  fake_run_timers();
+  SessionView committed = prv_view();
+  fake_now = 0;
+  session_coordinator_skip();
+  fake_run_timers();
+  SessionView view = prv_view();
+  assert(view.error == SESSION_ERROR_CLOCK);
+  assert(view.record.lifecycle == SESSION_RUNNING);
+  assert(view.record.phase == committed.record.phase);
+  assert(view.record.deadline_utc == committed.record.deadline_utc);
+  assert(fake_schedule_count == 1);
+  assert(fake_haptic_count == 0);
+
+  fake_reset();
+  prv_start_session();
+  session_coordinator_pause();
+  fake_run_timers();
+  (void)prv_view();
+  fake_run_timers();
+  committed = prv_view();
+  fake_now = 0;
+  session_coordinator_skip();
+  fake_run_timers();
+  view = prv_view();
+  assert(view.error == SESSION_ERROR_CLOCK);
+  assert(view.record.lifecycle == SESSION_PAUSED);
+  assert(view.record.phase == committed.record.phase);
+  assert(view.record.remaining_seconds == committed.record.remaining_seconds);
+  assert(fake_schedule_count == 1);
+  assert(fake_haptic_count == 0);
+
+  /* A valid but overflowing clock is rejected by prv_skip's own guard. */
+  fake_reset();
+  prv_start_session();
+  session_coordinator_pause();
+  fake_run_timers();
+  (void)prv_view();
+  fake_run_timers();
+  committed = prv_view();
+  int writes = s_write_attempts;
+  fake_now = (time_t)INT32_MAX - 10;
+  session_coordinator_skip();
+  fake_run_timers();
+  view = prv_view();
+  assert(view.error == SESSION_ERROR_CLOCK);
+  assert(view.record.lifecycle == SESSION_PAUSED);
+  assert(view.record.phase == committed.record.phase);
+  assert(view.record.remaining_seconds == committed.record.remaining_seconds);
+  assert(view.record.generation == committed.record.generation);
+  assert(s_write_attempts == writes);
+  assert(fake_schedule_count == 1);
+  assert(fake_haptic_count == 0);
+}
+
+static void test_skip_restart_does_not_replay_haptic(void) {
+  fake_reset();
+  prv_start_session();
+  session_coordinator_skip();
+  fake_run_timers();
+  assert(fake_haptic_count == 1);
+  SessionRecord stored;
+  bool found;
+  assert(session_store_load(&stored, &found) && found);
+  assert(stored.haptic_generation == stored.generation);
+  session_coordinator_deinit();
+  session_coordinator_init();
+  fake_run_timers();
+  SessionView view = prv_view();
+  assert(view.record.lifecycle == SESSION_RUNNING);
+  assert(view.record.phase == SESSION_PHASE_STAND);
+  assert(view.error == SESSION_ERROR_NONE);
+  assert(fake_haptic_count == 1);
+}
+
+static void test_menu_row_zero_resumes_paused_session(void) {
+  fake_reset();
+  prv_start_session();
+  fake_now += 137;
+  session_coordinator_pause();
+  fake_run_timers();
+  SessionView paused = prv_view();
+  assert(paused.record.lifecycle == SESSION_PAUSED);
+  fake_now += 60;
+  session_coordinator_select_menu_row(0);
+  fake_run_timers();
+  SessionView view = prv_view();
+  assert(view.record.lifecycle == SESSION_RUNNING);
+  assert(view.record.phase == paused.record.phase);
+  assert(view.record.deadline_utc == fake_now + paused.record.remaining_seconds);
+  assert(view.record.wakeup_id == fake_last_scheduled_id);
   assert(fake_haptic_count == 0);
 }
 
@@ -1610,7 +1901,7 @@ static void test_menu_resume_row_ends_timed_pause_early(void) {
 
 typedef enum {
   DAY_TIMED_ENTRY, DAY_EARLY_RESUME, DAY_PAUSE_END_CALLBACK, DAY_PAUSE_END_RECOVERY,
-  DAY_MANUAL_PAUSE, DAY_MANUAL_RESUME, DAY_CASES
+  DAY_MANUAL_PAUSE, DAY_MANUAL_RESUME, DAY_SKIP_RUNNING, DAY_SKIP_PAUSED, DAY_CASES
 } DayCase;
 
 /* Starts 100 s before local midnight with a non-zero tally, runs the case's setup, crosses
@@ -1645,7 +1936,7 @@ static void test_pause_transitions_reset_tally_day_across_midnight(void) {
     if (c == DAY_EARLY_RESUME || c == DAY_PAUSE_END_CALLBACK || c == DAY_PAUSE_END_RECOVERY) {
       session_coordinator_timed_pause(c == DAY_EARLY_RESUME ? 30 * 60 : 5 * 60);
       fake_run_timers();
-    } else if (c == DAY_MANUAL_RESUME) {
+    } else if (c == DAY_MANUAL_RESUME || c == DAY_SKIP_PAUSED) {
       session_coordinator_pause();
       fake_run_timers();
     }
@@ -1681,6 +1972,11 @@ static void test_pause_transitions_reset_tally_day_across_midnight(void) {
         break;
       case DAY_MANUAL_PAUSE:
         session_coordinator_pause();
+        fake_run_timers();
+        break;
+      case DAY_SKIP_RUNNING:
+      case DAY_SKIP_PAUSED:
+        session_coordinator_skip();
         fake_run_timers();
         break;
       default:
@@ -2411,6 +2707,14 @@ int main(void) {
   test_early_callback_reschedules_same_deadline();
   test_stop_failure_keeps_persisted_session();
   test_menu_row_contract();
+  test_menu_row_zero_resumes_paused_session();
+  test_skip_cycles_phases_without_counting_and_ignores_stale_callback();
+  test_skip_reconciles_due_deadline_first();
+  test_skip_from_paused_and_timed_paused_starts_running_phase();
+  test_skip_is_noop_while_inactive();
+  test_skip_failures_retain_committed_state();
+  test_skip_invalid_utc_preserves_committed_state();
+  test_skip_restart_does_not_replay_haptic();
   test_pause_resume_freezes_persists_and_rejects_stale_callback();
   test_pause_due_boundary_reconciles_first();
   test_pause_resume_failures_retain_committed_state();

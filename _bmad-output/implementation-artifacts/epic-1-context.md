@@ -44,5 +44,5 @@ Deliver a watch-first Pebble Time 2 app for running and controlling a repeating 
 
 ## Cross-Story Dependencies
 
-- Story 1.1 is the pre-implementation toolchain/readiness gate. Stories 1.2–1.7 depend on it; Story 1.8 depends on Stories 1.2–1.7 and is the final pre-release physical-device acceptance gate. Unverified or failed required physical behavior blocks release pending a product decision.
+- Story 1.1 is the pre-implementation toolchain/readiness gate. Stories 1.2–1.7 depend on it; the owner has waived this for Stories 1.2–1.6 while 1.1 stays open (the waiver does not close 1.1 or cover 1.7–1.8); Story 1.8 depends on Stories 1.2–1.7 and is the final pre-release physical-device acceptance gate. Unverified or failed required physical behavior blocks release pending a product decision.
 - Story 1.2 establishes the coordinator, canonical record, lifecycle, view, and launch-repair foundation. Story 1.3 adds cycle progression, overdue recovery, and natural-completion tally behavior; Stories 1.4–1.7 add controls through the same coordinator and reconcile due deadlines before applying commands.

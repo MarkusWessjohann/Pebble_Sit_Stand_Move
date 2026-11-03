@@ -168,11 +168,6 @@ static void prv_render_cb(void *context) {
 static void prv_menu_select(MenuLayer *menu_layer, MenuIndex *cell_index, void *context) {
   (void)menu_layer;
   (void)context;
-  SessionView view;
-  session_coordinator_get_view(&view);
-  if (cell_index->row == 1 && view.record.lifecycle != SESSION_INACTIVE) {
-    return;
-  }
   session_coordinator_select_menu_row(cell_index->row);
   window_stack_pop(true);
   app_timer_register(5, prv_render_cb, NULL);
