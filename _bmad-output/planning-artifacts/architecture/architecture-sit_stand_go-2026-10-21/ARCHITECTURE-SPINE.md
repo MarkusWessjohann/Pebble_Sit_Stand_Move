@@ -7,8 +7,8 @@ paradigm: event-driven state machine
 scope: Pebble Time 2 sit/stand/move reminder app
 status: final
 created: 2026-10-21
-updated: 2026-10-31
-binds: [FR-1, FR-2, FR-3, FR-4, FR-5, FR-6, FR-7, UJ-1, UJ-2]
+updated: 2026-11-03
+binds: [FR-1, FR-2, FR-3, FR-4, FR-5, FR-6, FR-7, FR-9, FR-10, FR-11, UJ-1, UJ-2]
 sources:
   - _bmad-output/planning-artifacts/prds/prd-sit_stand_go-2026-10-21/prd.md
 companions: []
@@ -102,11 +102,12 @@ An event-driven state machine in one native Pebble C watch app. One session coor
 - **Prevents:** Showing a running/background-scheduled Session when persistence or Wakeup scheduling failed.
 - **Rule:** On persistence or Wakeup scheduling failure, do not report the Session as reliably active or background-scheduled. Surface the failure in the app UI. A failed proposal is not retried automatically; only a user command retries it. Launch repair handles the last committed record. If persistence fails, do not claim the new state is recoverable. If Wakeup scheduling fails, retain the last committed record and do not claim the proposed phase mutation succeeded. A new Session whose state and Wakeup cannot both be committed remains inactive.
 
-### AD-14 — Haptic mode is fixed for v1 [ADOPTED]
+### AD-14 — Haptic is the only notification channel; its pattern is owner-selectable [ADOPTED, amended 2026-11-03]
 
-- **Binds:** FR-3, all v1 notification behavior
-- **Prevents:** Independent implementations adding different notification settings or fallback modes.
-- **Rule:** V1 uses Pebble haptic signals for automatic phase deadlines, timed-pause completion, and Skip; manual controls including Extend do not emit haptics. Do not add notification-mode customization or fallback delivery. Verify target firmware permits haptic on scheduled Wakeup; if unsupported, revisit scope with owner.
+- **Binds:** FR-3, FR-9, FR-10, all v1 notification behavior
+- **Prevents:** Independent implementations adding other notification settings, alternate channels, or fallback delivery, and prevents more than one source of truth for the haptic pattern.
+- **Rule:** V1 uses Pebble haptic signals for automatic phase deadlines, timed-pause completion, and Skip; manual controls including Extend do not emit haptics. The owner may choose the haptic pattern (Short, Long, Double, Until Select; default Short) from a Settings entry in the native menu; this is the only notification setting. The pattern is stored in its own persistent key, outside the AD-9 session record, and is read only through the Session Coordinator's haptic call site, which every haptic request uses. Do not add other notification modes, alternate channels, or fallback delivery. An invalid or missing stored value falls back to Short without surfacing an error. Verify target firmware permits haptic on scheduled Wakeup; if unsupported, revisit scope with owner.
+- **Supersedes:** The original "Haptic mode is fixed for v1" rule (2026-10-21), by owner decision on 2026-11-03.
 
 ### AD-15 — Extension is additive to the active Phase
 
@@ -126,6 +127,12 @@ An event-driven state machine in one native Pebble C watch app. One session coor
 - **Prevents:** A stale pause-end alarm vibrating or reopening the app after the user has already resumed manually.
 - **Rule:** If the user resumes a `timed_paused` Session before its pause-end deadline, cancel its persisted `WakeupId`, increment the generation, transition to `running`, and set the phase deadline to current UTC plus saved remaining duration. Before applying Resume, AD-10 reconciles `now >= pause_end_deadline`; if due, PauseEnd is processed first and Resume is a no-op in `running`. Any callback with the previous generation or Wakeup ID after early Resume is ignored and produces neither a haptic request nor app reopen.
 
+### AD-18 — Until Select alert is one haptic attempt that repeats until dismissed [ADOPTED, 2026-11-03]
+
+- **Binds:** FR-11, NFR-10, AD-12, AD-14
+- **Prevents:** Treating repetition as retried haptic attempts, replaying an alert after relaunch, a dismiss press also firing the middle control, and an alert that never stops.
+- **Rule:** With the Until Select pattern, the alert is one committed haptic attempt: the AD-12 haptic-attempt marker is persisted once, before the first vibration, and repetition is presentation of that one attempt, never a retry. The alert repeats at a fixed interval until the first of: the owner presses Select, a 2-minute cap after it starts, the session is stopped, a newer haptic-requesting transition supersedes it (only one alert runs at a time), or the app exits. The alert is volatile app state, never persisted; relaunch and overdue recovery do not resume it, and recovery starts at most one new alert for a newly reconciled transition. While an alert is repeating, Select is handled before the middle-control dispatch (`session_coordinator_middle_control()`): it stops the alert and enqueues no session event. Up, Down, long-press Select, and menu commands keep their normal functions. When no alert is repeating, Select is unchanged. The session view shows a text cue while the alert repeats.
+
 ## Consistency Conventions
 
 | Concern | Convention |
@@ -143,7 +150,8 @@ An event-driven state machine in one native Pebble C watch app. One session coor
 | Wakeup cookie | Cookie carries the persisted session generation; increment on every deadline-changing mutation (AD-11). |
 | Wakeup query | Running record persists current `WakeupId`; only coordinator queries/schedules/cancels. |
 | Haptic delivery | On-time automatic and Skip transitions request one haptic; Start/Pause/Resume/Stop/Extend do not. Recovery requests one for current phase; at-most-once attempt, best-effort delivery (AD-12). |
-| Notification mode | Haptic only for v1; no setting or alternate channel (AD-14). |
+| Notification mode | Haptic only; owner-selectable pattern is the sole setting, stored in its own key; no alternate channel (AD-14). |
+| Repeating alert | Until Select repeats one committed haptic attempt; volatile, capped at 2 minutes, dismissed by Select before middle-control dispatch (AD-18). |
 
 ## Stack
 
@@ -183,7 +191,7 @@ src/
 | --- | --- | --- |
 | FR-1 Session start/stop | Session Coordinator, Watch UI | AD-1, AD-5–AD-6, AD-9–AD-11 |
 | FR-2 Phase cycle | Session Coordinator, Wakeup adapter | AD-1–AD-4, AD-6, AD-9–AD-12 |
-| FR-3 Phase haptic/app display | Session Coordinator, Pebble Wakeup/haptic APIs | AD-3–AD-4, AD-7, AD-12–AD-14 |
+| FR-3 Phase haptic/app display | Session Coordinator, Pebble Wakeup/haptic APIs | AD-3–AD-4, AD-7, AD-12–AD-14, AD-18 |
 | FR-4 Manual pause/resume | Session Coordinator, persistent session record | AD-1–AD-2, AD-6, AD-9–AD-11 |
 | FR-5 Timed Pause | Session Coordinator, Wakeup adapter | AD-1–AD-4, AD-6–AD-7, AD-9–AD-12, AD-16–AD-17 |
 | FR-6 Skip | Session Coordinator, Wakeup adapter | AD-1–AD-3, AD-6–AD-7, AD-9–AD-12 |

@@ -2,7 +2,7 @@
 title: Sit Stand Go — Pebble Reminder App
 status: draft
 created: 2026-10-21
-updated: 2026-10-31
+updated: 2026-11-03
 ---
 
 # Product Brief: Sit Stand Go
@@ -45,7 +45,7 @@ These criteria describe intended outcomes; exact platform capabilities and test 
 
 ## Scope
 
-**First version:** A watch-first Pebble Time 2 app; manually started/stopped sessions; repeating 45-minute Sit, 10-minute Stand, and 5-minute Move phases; haptic plus app UI on automatic phase deadlines; manual pause/resume; timed pause for 5/10/30 minutes that resumes the same interrupted phase; skip; +5/+10-minute extensions; and deterministic missed-deadline recovery.
+**First version:** A watch-first Pebble Time 2 app; manually started/stopped sessions; repeating 45-minute Sit, 10-minute Stand, and 5-minute Move phases; haptic plus app UI on automatic phase deadlines; manual pause/resume; timed pause for 5/10/30 minutes that resumes the same interrupted phase; skip; +5/+10-minute extensions; deterministic missed-deadline recovery; and an owner-selectable haptic pattern (Short, Long, Double, Until Select) chosen in a Settings menu.
 
 **Out of scope:** Activity sensing, health claims, history or adherence analytics, social features, cloud services, extensive schedule management, and a required phone companion.
 
@@ -64,6 +64,7 @@ If the personal version proves useful, Sit Stand Go can remain a lightweight wat
 - **Decision:** On any recovery after a deadline is due, advance elapsed phases in order, restart the resulting current phase with full default duration, and emit only one haptic.
 - **Decision:** UTC epoch remains authoritative when device clock changes; forward adjustment can make a phase due, backward adjustment delays it.
 - **Decision:** Skip emits one haptic; timed-pause end requests one; Start/manual Pause/Resume/Stop/Extend do not. If UTC time is invalid, a new Session stays inactive with a visible time error; an active Session keeps its saved state until valid time is restored.
+- **Decision (2026-11-03):** The owner chooses the haptic pattern in a Settings menu: Short (default), Long, Double, or Until Select, which repeats until Select is pressed or 2 minutes pass. The pattern applies to every haptic request; Start, manual Pause, Resume, Stop, and Extend stay silent.
 - **Open:** Measurable timing tolerance on Pebble Time 2, to be agreed before Story 1.8 pre-release acceptance; invalid-clock handling is fixed as an inactive Session with visible error.
 - **Open:** A separate Pebble system alert for missed wakeups is disabled by default; reconsider only if target testing shows user value.
 - **Open:** If Pebble Time 2 cannot foreground the finished app or request a haptic at timed-pause end, revisit whether timed pause belongs in v1 before release.

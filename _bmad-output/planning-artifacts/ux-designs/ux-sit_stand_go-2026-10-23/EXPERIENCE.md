@@ -20,9 +20,10 @@ Single-surface, watch-first experience for Pebble Time 2. No phone interaction i
 | Surface | Reached from | Purpose |
 |---|---|---|
 | Session view | App start/open; phase or timed-pause event requests open/foreground | Show current time, active phase and remaining time, phase icon, and today's completed Sit / Stand / Move counts. Provide the three right-side hardware controls. |
-| Native watch menu | Opened through Pebble menu navigation | When inactive, show Start. While active, show Pause/Resume, Skip, then Stop, with Pause or Resume selected according to lifecycle state. |
+| Native watch menu | Opened through Pebble menu navigation | When inactive, show Start, then Settings. While active, show Pause/Resume, Skip, Stop, then Settings, with Pause or Resume selected according to lifecycle state. |
+| Settings window | Native watch menu → Settings | Native menu window listing the haptic patterns Short, Long, Double, and Until Select in that order. Mark the current choice in text. Selecting a row saves it, plays one preview, and returns to the previous screen; Back leaves it unchanged. |
 
-There is one foreground session view and one native menu; no phone, settings, history, analytics, or additional product surface is in scope. The session view's ordered layout and control placement are in `DESIGN.md`.
+There is one foreground session view, one native menu, and one Settings window for the haptic pattern; no phone, history, analytics, or other additional product surface is in scope. The session view's ordered layout and control placement are in `DESIGN.md`.
 
 Verify finished-app controls, legibility, and firmware-dependent behavior on Pebble Time 2 in Story 1.8 before release.
 
@@ -52,8 +53,9 @@ Behavioral rules; visual placement lives in `DESIGN.md` → Components.
 | Top hardware button | Session view | See the running and timed-pause control rules in Interaction Primitives. Visual specification: `DESIGN.md` → Top hardware button. |
 | Middle hardware button | Session view | See the running, manual-pause, and timed-pause control rules in Interaction Primitives. Visual specification: `DESIGN.md` → Middle hardware button. |
 | Bottom hardware button | Session view | See the running and timed-pause control rules in Interaction Primitives. Visual specification: `DESIGN.md` → Bottom hardware button. |
-| Watch menu | Session view | When inactive, Start is the available session command. While active, commands appear in this order: Pause/Resume, Skip, Stop. See Interaction Primitives. Visual specification: `DESIGN.md` → Watch menu. |
+| Watch menu | Session view | When inactive, Start is the available session command, then Settings. While active, commands appear in this order: Pause/Resume, Skip, Stop, Settings. See Interaction Primitives. Visual specification: `DESIGN.md` → Watch menu. |
 | Status message | Session view | Surface invalid clock, persistence, and wakeup/scheduling failures; do not represent a failed proposal as active or reliably scheduled. Visual specification: `DESIGN.md` → Status message. |
+| Alert cue | Session view | While an Until Select alert repeats, show the text `Select to stop`. It must not overlap the countdown, icon, phase name, tally, button labels, or error text, and does not rely on color. Visual specification: `DESIGN.md` → Alert cue. |
 
 The timed-pause control mapping is defined once under Interaction Primitives. The visual labels `BREAK` and `PAUSED` distinguish timed break from indefinite manual pause; see `DESIGN.md` → Middle hardware button.
 
@@ -69,6 +71,7 @@ Session lifecycle follows architecture states: `inactive`, `running`, `paused` (
 | `timed_paused` | Show `BREAK`, remaining break time, and alternative duration labels. | Timed-pause controls and completion follow Interaction Primitives. Resume the same phase without cycle advancement. |
 | Automatic phase transition | Show the newly active phase and remaining time if firmware opens/foregrounds the app. | Advance at due deadline; request one haptic. Physical delivery and foregrounding require device verification. |
 | Skip transition | Show the next phase and its default remaining time. | Skip requests one haptic; exclude the skipped phase from day totals. |
+| Until Select alert | Show the `Select to stop` cue. | One committed haptic attempt repeats until Select, a 2-minute cap, Stop, or supersession by a newer transition (AD-18). Select stops it and starts no timed pause or resume. Not resumed after relaunch. |
 | Stopped | Session is inactive; Start is available in the menu. | A new session begins with Sit. |
 | Invalid clock | Show a visible time error. | New session remains inactive. For an active session, preserve saved state and suppress scheduling/haptics until valid time returns, then reconcile the deadline. |
 | Persistence or wakeup failure | Show a visible failure message. | Do not claim the new mutation is active or background-scheduled if commit/scheduling failed; retain the last committed state per architecture. |
@@ -86,6 +89,8 @@ Session lifecycle follows architecture states: `inactive`, `running`, `paused` (
 - **Manual Pause/Resume:** Menu command for indefinite pause. Freeze the phase and preserve remaining duration; show `PAUSED`. No automatic deadline; Resume continues the same phase. Both are silent.
 - **Skip:** Menu command advances immediately to next phase at its default duration, requests one haptic, and excludes the skipped phase from tally.
 - **Stop:** Menu command makes session inactive and prevents later reminders for that session. Silent. Next Start begins at Sit.
+- **Settings:** Menu command, last row in every state. Opens the Settings window. Silent apart from the single preview when a pattern is selected.
+- **Select while an alert repeats:** Stops the alert and is consumed; it enqueues no session event. With no alert repeating, Select is unchanged: middle control while a session is running, paused, or timed-paused, and the native menu when inactive.
 - **Competing input and deadline:** Coordinator reconciles a due deadline before applying the command, using `now >= deadline`; UI must not independently resolve races.
 - **Day boundary:** `[ASSUMPTION]` local watch calendar date defines the tally day; behavior at midnight follows this boundary unless revised.
 
@@ -130,7 +135,7 @@ Failure path: if Skip cannot be committed or its Wakeup cannot be scheduled, sho
 ## Open Items and Assumptions
 
 - `[ASSUMPTION]` No named persona was supplied; journeys use “the owner.”
-- Native menu command order is Start when inactive; Pause/Resume, Skip, Stop while active. Physical navigation mechanics remain native Pebble behavior.
+- Native menu command order is Start, Settings when inactive; Pause/Resume, Skip, Stop, Settings while active. Physical navigation mechanics remain native Pebble behavior.
 - Timed-pause alternatives map by duration: shorter on top and longer on bottom; a new 30-minute break shows 5 on top and 10 on bottom.
 - Today's tally uses the watch's local calendar day, persists locally across app restarts, aggregates across sessions, and resets at local midnight.
 - Use monochrome phase icons for a chair (Sit), standing person (Stand), and moving person (Move), always paired with readable text; verify suitable native assets and legibility on Pebble Time 2.

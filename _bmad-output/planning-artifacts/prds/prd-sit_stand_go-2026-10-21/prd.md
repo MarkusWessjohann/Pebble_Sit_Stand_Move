@@ -2,7 +2,7 @@
 title: Sit Stand Go — Pebble Reminder App
 status: final
 created: 2026-10-21
-updated: 2026-10-31
+updated: 2026-11-03
 ---
 
 # PRD: Sit Stand Go
@@ -138,13 +138,35 @@ The user can extend the active Phase by +5 minutes or +10 minutes. The selected 
 - Phase transitions use UTC epoch wall time even when the device clock is manually/system adjusted: a forward correction that reaches a deadline makes it due; a backward correction delays it. Invalid UTC at Start leaves the Session inactive with a visible clock-time error. If UTC becomes invalid during a running Session, preserve state and suppress scheduling/haptics until valid time returns, then reconcile the deadline.
 - Before physical acceptance, agree a measurable phase-transition tolerance and verify it on Pebble Time 2 using the finished app; test deadline/control races using `now >= deadline`.
 
+#### FR-9: Choose the haptic pattern
+
+The user can open Settings from the native watch menu, in every session state, and choose the haptic pattern: Short, Long, Double, or Until Select. The choice persists across app restarts, Stop, and Start, and defaults to Short (the single short pulse). The only notification setting is the haptic pattern; there is no alternate channel.
+
+**Consequences (testable):**
+- Settings is the last native menu row in every lifecycle state, and its window lists the four patterns in that order with the current choice marked in text.
+- Selecting a pattern saves it and gives a single preview; Back leaves it unchanged.
+- A missing or corrupt stored value falls back to Short without an error.
+
+#### FR-10: Apply the pattern to every haptic request
+
+The chosen pattern applies to every haptic request: automatic phase transition, timed-pause end, and Skip. Start, manual Pause, Resume, Stop, and Extend stay silent whatever the pattern. A haptic is still one attempt per committed transition.
+
+#### FR-11: Repeat the alert until Select
+
+With Until Select, the haptic repeats until the user presses Select, then stops. That press is consumed and does not trigger the middle-control action. The repeat also stops after 2 minutes, on Stop, when a newer haptic transition supersedes it, and when the app exits. A relaunch never resumes it.
+
+**Consequences (testable):**
+- While the alert repeats, the session view shows `Select to stop`.
+- Pressing Select while it repeats starts no timed pause and changes no session state.
+- With no alert repeating, Select behaves as before.
+
 ## 6. Non-Goals
 
 - Detecting posture, steps, or movement automatically.
 - Health advice, health outcome claims, activity history, or adherence analytics.
 - Social features, cloud services, or a required phone companion.
 - Scheduled working hours or automatic overnight start/stop.
-- Extensive phase-duration or notification customization in the first version.
+- Phase-duration customization, and any notification customization other than the haptic pattern (FR-9), in the first version.
 
 ## 7. MVP Scope
 
@@ -155,6 +177,7 @@ The user can extend the active Phase by +5 minutes or +10 minutes. The selected 
 - On-time phase deadlines emit haptics and open the app UI to show the new Phase and remaining time.
 - Manual pause/resume; timed pause for 5, 10, or 30 minutes; skip; and +5/+10-minute Phase extension.
 - Background reminders, subject to the pre-release physical-device acceptance gate in §5.1 and Story 1.8.
+- Owner-selectable haptic pattern (Short, Long, Double, Until Select) in a Settings menu (FR-9 to FR-11).
 
 ### 7.2 Out of Scope for MVP
 
@@ -167,7 +190,7 @@ The user can extend the active Phase by +5 minutes or +10 minutes. The selected 
 
 - **SM-1:** After Story 1.8 pre-release acceptance, the owner can observe a full 45/10/5 Cycle, the app requests haptics for automatic phase deadlines, timed-pause end, and Skip, and shows the active/resumed Phase and remaining time when opened on Pebble Time 2. Validates FR-1–FR-8.
 - **SM-2:** The owner can manually pause/resume, choose a 5/10/30-minute timed pause, skip, and extend without losing the active Session. Skip requests one haptic; timed-pause end requests at most one without advancing; Extend is silent. Early manual resume makes stale pause-end callbacks silent and prevents app reopen. Validates FR-4–FR-7.
-- **SM-C1 (counter-metric):** Avoid repeated or stale haptics after a Session is stopped or paused; reminder volume should not increase at the expense of control. Counterbalances SM-1.
+- **SM-C1 (counter-metric):** Avoid repeated or stale haptics after a Session is stopped or paused; reminder volume should not increase at the expense of control. Counterbalances SM-1. The Until Select pattern (FR-11) is a deliberate, owner-chosen exception: it repeats one committed attempt, stops on Select or after 2 minutes, and never resumes after relaunch.
 
 - **SM-3:** If the app recovers when a phase deadline is due/overdue, it processes elapsed phases in order and rebases the current Phase with its full default duration; if a timed-pause deadline is due/overdue, it resumes the interrupted Phase with saved remaining duration and no Cycle advancement. Haptic invocation is at most once. Validates FR-2, FR-3, FR-5.
 - **SM-4:** Skip advances and requests one haptic; timed-pause end resumes the same Phase and requests one; early manual resume prevents stale haptic/app reopen; Start, manual Pause, Resume, Stop, and Extend request none. Validates FR-1, FR-4–FR-7.
