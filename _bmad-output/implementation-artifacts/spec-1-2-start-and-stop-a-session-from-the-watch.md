@@ -107,3 +107,28 @@ Implemented the event-queued session coordinator, 33-byte versioned persistent r
 - deferred — Pause and Skip stay selectable no-ops until Stories 1.4 and 1.6. Pausing and skipping, and phase haptics, stay with Stories 1.4, 1.6, and 1.3.
 - deferred — The multi-cycle arithmetic in `prv_reconcile_phase` is an optimization. Replacing it with a single-step loop gives the same result, so no behavioral test can pin it.
 - false — `tests/test_pebble_wrapper.py` belongs to the Story 1.1 SDK-pin commit (`7fa97ee`), not to this story's code.
+
+### Review Findings
+
+Code review of `ef33c2f..faa0104` (be85b56, 3cab0b6, 7fa97ee, faa0104), 2026-11-02. Layers: blind-hunter, edge-case-hunter, verification-gap, acceptance-auditor.
+
+- [x] [Review][Patch] A running session can be left with no effective Wakeup and no retry — resolved by decision (option 1): on every `prv_recover` failure exit and failed `prv_wakeup` reschedule, represent the lost Wakeup uniformly (`wakeup_id = -1`, in a form `session_store_validate` and later saves accept), keep the visible error, and add a reconcile/retry trigger that reschedules and reconciles any due deadline once UTC is valid again (e.g. from `get_view` or the coordinator's FIFO). Cover each exit with a test asserting error code, `wakeup_id == -1` and the later retry. [src/c/session_coordinator.c:176-217, 251-300] (sources: blind-hunter+edge-case-hunter+verification-gap+acceptance-auditor; medium)
+- [x] [Review][Patch] Tests never check which Wakeup id is cancelled — the `wakeup_cancel` stub discards the id, so Stop or a phase transition cancelling `-1` or the new id still passes on `fake_cancel_count`. Record the last cancelled id and assert it in Start-failure, Stop and transition tests. [tests/session_coordinator_test.c:83-86, 201, 296] (verification-gap; medium)
+- [x] [Review][Patch] Menu-row Stop and Start with a due deadline are untested — the reconcile-before-command branches in `EVENT_MENU_SELECT` row 2 and `EVENT_START` are exercised only through `session_coordinator_stop()`. Add menu-row 2 and Start tests with `fake_now >= deadline`. [src/c/session_coordinator.c:312-338] (verification-gap+acceptance-auditor; medium)
+- [x] [Review][Patch] Launch-from-Wakeup branch in `session_coordinator_init` is never executed — `launch_reason()` and `wakeup_get_launch_event()` stubs are hard-wired to false. Make them configurable and test that the launch event is queued behind recovery and rejected as stale after `wakeup_cancel_all` and reschedule. [src/c/session_coordinator.c:388-394; tests/session_coordinator_test.c:96-104] (verification-gap; medium)
+- [x] [Review][Patch] Recovery failure exits have no test for the surfaced error — only the not-due schedule failure is covered. Add cases for invalid clock, overdue schedule failure and overdue save failure asserting `SESSION_ERROR_CLOCK`, `_WAKEUP` and `_STORAGE`. Also assert `wakeup_id == -1` (per the resolved recovery decision). [src/c/session_coordinator.c:176-198] (verification-gap+edge-case-hunter; low)
+
+#### Rejected
+
+- false — Story 1.1 SDK-pin files (`.pebble-sdk-version`, `scripts/pebble.py`, wrapper tests, README) violate the "pin remains open" decision: they come from `7fa97ee`, a Story 1.1 commit the chosen range includes. The Decision authorises 1.2 to proceed while 1.1 stays in progress; it does not forbid 1.1 work.
+- false — Phase progression and overdue recovery belong to Story 1.3: the spec's own tests task lists "overdue reconciliation", AC4 requires due-deadline reconciliation, and the Implementation Notes record that tally and haptics are not included.
+- false — Diagnostic harness removal breaks Story 1.1 evidence: the spec's Approach says to replace the harness, and the revision-specific evidence gap is already in `deferred-work.md`.
+- false — Wrapper "refuses build/install" claim contradicted by behavior: the guard applies to a superset of commands, which still satisfies the claim.
+- false — Generation reaching INT32_MAX blocks Stop: about 2 billion transitions at 60-minute cycles is unreachable.
+- low — Spec `status: 'done'` vs sprint `review` and Code Map: the fix edits the spec under review; the status is updated by this workflow's final step anyway.
+- low — `pebble.py` guards `sdk`/`clean` commands, runs the SDK check before the usage check, no `uv` or missing pin file handling, regex-style `(active)` matching: cosmetic in a Story 1.1 helper; fix adds branches.
+- low — `s_rollover_requested_day` set before enqueue succeeds, and `get_view` enqueues a rollover from draw procs: needs a full queue to bite; fix changes `prv_enqueue`'s signature.
+- low — Menu row numbers hard-coded in UI and coordinator, three copies of the due-reconcile block: no current divergence; the test patches above pin the copies.
+- low — Host tests depend on `localtime()` timezone: maybe-false, would only be low (settle by running the suite under `TZ=Pacific/Kiritimati` and `TZ=Pacific/Pago_Pago`).
+- low — Stale Story 1.1 narrative and rewritten Spec Change Log entry, tally string width, `haptic_generation` unused, `notify_if_missed=false`, no CI for `scripts/test.sh`, no ASan/UBSan: no named harm for 1.2, or owned by Stories 1.3 and 1.8.
+- duplicate — Queue overflow drops Stop/Wakeup, minimum plausible UTC, countdown clamp, no-op Pause/Skip, fixed layout offsets, always-on refresh timer, invalid-record reset, deinit not unsubscribing, native MenuLayer untested: already deferred in Review Triage Log rounds 1 and 2 and in `deferred-work.md`.

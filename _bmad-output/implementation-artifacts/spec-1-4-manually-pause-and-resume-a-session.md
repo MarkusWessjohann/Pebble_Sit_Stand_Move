@@ -85,3 +85,28 @@ Implemented persisted manual pause using the existing 33-byte record, storing th
 - defer — The middle-control decision is factored into and tested through `session_coordinator_resume_if_paused()`, and source inspection confirms the Select click handler calls it. The repository's host test harness does not compile the Pebble UI layer; actual hardware button behavior is explicitly verified in Story 1.8.
 - false — A due Pause first processes the automatic phase deadline; any haptic belongs to that due automatic transition, not to the manual Pause command. This preserves Story 1.3's transition reminder contract and Story 1.4's silent manual action.
 - patch — Factored paused middle-control behavior into `session_coordinator_resume_if_paused()` and added coverage for resumed-when-paused and no-op-when-running; `scripts/test.sh` passes.
+
+### Review Findings
+
+Code review of `0491edf..8f7cbf3` (commit 8f7cbf3), 2026-11-02, verified against HEAD. Layers: blind-hunter, edge-case-hunter, verification-gap, acceptance-auditor.
+
+- [x] [Review][Patch] Resume and Pause with an invalid or overflowing clock are untested — verified by mutation at HEAD: deleting the `prv_read_utc` check or the `now > INT32_MAX - remaining_seconds` guard in `prv_resume` leaves `scripts/test.sh` green (Resume of a PAUSED record is not covered by the generic pre-command clock check, so these guards are the only protection). Add: Resume with `fake_now = 0` keeps the paused record, reports `SESSION_ERROR_CLOCK`, and causes no write or schedule; Resume near `INT32_MAX` is rejected the same way; Pause with `fake_now = 0` keeps the running record with `SESSION_ERROR_CLOCK` and no write. Probes confirm the current behaviour is correct. [tests/session_coordinator_test.c: test_pause_resume_failures_retain_committed_state; src/c/session_coordinator.c prv_resume] (verification-gap+acceptance-auditor; medium)
+- [x] [Review][Patch] Coordinator-level Skip row (row 1) is no longer asserted inert while running or paused — the old `test_menu_row_contract` loop over rows 0..1 was replaced, and `select_menu_row(1)` is now exercised only for the inactive state. Probes confirm no mutation today (lifecycle, phase, deadline, Wakeup, generation, writes, schedules unchanged), so this pins the behaviour until Story 1.6. [tests/session_coordinator_test.c: test_menu_row_contract] (blind-hunter+edge-case-hunter+verification-gap+acceptance-auditor; low)
+- [x] [Review][Patch] Paused-record load rejection for `time_low > INT32_MAX` is untested — the store tests cover a zero remainder and a non-zero high word, but not an oversized low word for `SESSION_PAUSED`. Add a mutated-bytes case. [src/c/session_store.c:111; tests/session_coordinator_test.c: test_store_rejects_invalid_records] (verification-gap; low)
+
+#### Rejected
+
+- false — Resume's due-deadline branch has no test (verification-gap, blind-hunter): `prv_resume` no longer reconciles. At HEAD the generic pre-command step in `prv_process` does, for every command, and a paused session has no deadline to reconcile.
+- false — Pause on a due running record with `wakeup_id < 0` fails with a mislabelled WAKEUP error, overwriting CLOCK/STORAGE (edge-case-hunter, acceptance-auditor): fixed at HEAD. `prv_wakeup_lost()` and the CLOCK branch route that state through the commit-reload-and-recover path before `prv_reconcile_before_command`.
+- false — Resume does not reset the daily tally day (acceptance-auditor): `prv_resume` calls `prv_reset_tally_day` at HEAD.
+- false — Pause/Resume error has no rendering path (blind-hunter): `prv_render` writes `prv_error_text(view.error)` into `s_error_layer` on every render (`sit_stand_move.c:125-126`).
+- false — Old firmware loses a paused session, version compatibility ignored (blind-hunter): the spec states cross-version active-session compatibility is not a Story 1.4 requirement, and invalid records recover as inactive with a visible error.
+- false — Pause/Resume/Stop treat WAKEUP/STORAGE error states differently (edge-case-hunter): Stop's exception was removed in Story 1.4 itself, and all commands share `prv_reconcile_before_command` at HEAD.
+- false — Resume on a running session advances the phase and buzzes (edge-case-hunter, blind-hunter): that is the due automatic transition of Story 1.3, applied before any command by design, and the manual Resume itself stays silent.
+- rejected (already decided) — Due Pause emits a haptic (acceptance-auditor): the spec's Review Triage Log already records that the haptic belongs to the due automatic transition, per Story 1.3.
+- low — Row 0 is interpreted by lifecycle at processing time, and `resume_if_paused` (now `session_coordinator_middle_control`) reads `s_record` before the queued event drains: needs a click between enqueue and the 1 ms drain; fix changes the public API.
+- low — Select keeps retrying Resume after a failed Resume and never opens the menu: matches AC4 (middle control resumes), and the menu stays reachable by long press.
+- low — Paused `remaining_seconds` has no upper bound in `session_store_validate`: only reachable by corrupted storage, and Resume already rejects overflow with a clock error.
+- low — Stale-callback test does not isolate rejection by id or assert a flat schedule count after Resume: the paused half asserts both, and the lifecycle check rejects the callback independently.
+- duplicate — Hard-coded menu rows, `PAUSED: Stand` fit and controls hint text, UI wiring (`prv_select_click_handler`, `prv_menu_select`, labels) untested: deferred in this spec's Review Triage Log and Story 1.2's, and owned by Story 1.8.
+- rejected (spec edits) — Triage log labels, `review_loop_iteration: 0`, `status: 'done'` vs sprint `review`: every fix edits the spec under review.

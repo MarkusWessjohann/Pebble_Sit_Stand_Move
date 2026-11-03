@@ -22,3 +22,11 @@
 - source_spec: `_bmad-output/implementation-artifacts/1-1-establish-pebble-toolchain-and-emulator-readiness.md`
   summary: Record the exact source revision used for the owner-reported emulator Wakeup observations.
   evidence: The reports concern a replaced diagnostic harness, but the tested revision was not supplied; the procedure is revision-specific.
+
+## Deferred from: code review of spec-1-3-follow-the-cycle-and-recover-from-missed-deadlines (2026-11-02)
+
+- Stop cannot commit while a due transition keeps failing to schedule. `prv_reconcile_before_command` returns false on a failed reconcile (`src/c/session_coordinator.c:176-190`), so `prv_process` drops Stop and a second Stop fails the same way. Accepted by the owner: Stop stays blocked until Wakeup scheduling works again. Verified at HEAD with a probe test. Revisit if Story 1.8 device testing shows real scheduling failures; this conflicts with Story 1.2 AC3 only in that failure state.
+
+## Deferred from: code review of spec-1-5-take-and-end-a-timed-pause (2026-11-02)
+
+- PauseEnd (on-time and overdue recovery) requests a haptic but no explicit app-open/foreground call. The Pebble Wakeup launch opens the app and the SDK has no separate foreground call; Story 1.3 accepted the same wording. Verify on Pebble Time 2 in Story 1.8 whether a PauseEnd Wakeup raises the app from the menu window and from the background.

@@ -72,3 +72,30 @@ Implemented coordinator-owned natural-completion tally updates, on-time cycle pr
 **Manual checks (if no CLI):** Confirm physical wakeup, haptic delivery, and app foreground behavior remain unclaimed and assigned to Story 1.8.
 
 **Review result:** Three review passes found and resolved coordinator and verification gaps. Final behavior and edge-case review found no remaining actionable issues; physical Pebble Time 2 behavior remains assigned to Story 1.8.
+
+### Review Findings
+
+Code review of `9541cba..3088da3` (commit 3088da3), 2026-11-02, verified against HEAD. Layers: blind-hunter, edge-case-hunter, verification-gap, acceptance-auditor.
+
+- [x] [Review][Defer] Stop cannot commit while a due transition keeps failing to schedule [src/c/session_coordinator.c:176-190, 745-780] — deferred: accepted by owner decision (option 2); Stop stays blocked until Wakeup scheduling works again. Reproduced at HEAD with a probe test (running, `now >= deadline`, `wakeup_schedule` failing: Stop leaves RUNNING with `SESSION_ERROR_WAKEUP`). Revisit if Story 1.8 device testing shows scheduling failures in practice; conflicts with Story 1.2 AC3 "Stop commits inactive" only in this failure state.
+- [x] [Review][Patch] `prv_reconcile_phase` computes local midnight with the wrong DST flag — it copies `*localtime(&now)` and calls `mktime` with `tm_isdst` unchanged, so on a DST-change day the midnight is off by one hour. Repro (Europe/Berlin, 2026-10-25 fall-back, overdue 12 h): current code gives sit=13 stand=12 move=12, with `tm_isdst = -1` gives 13/13/13. Set `midnight.tm_isdst = -1` and add a DST-day regression test. [src/c/session_coordinator.c:66-80] (blind-hunter+edge-case-hunter; low)
+- [x] [Review][Patch] Tally tests depend on the host timezone — `fake_now = 1800000000` is exactly local midnight in America/Los_Angeles and 23:00 the previous day in America/Anchorage. Verified: `test_recovery_counts_each_elapsed_phase_once` fails under `TZ=America/Los_Angeles` and `test_natural_cycle_tally_and_haptics_persist` under `TZ=America/Anchorage`; both pass under UTC and Europe/Berlin. Pin `TZ` for the C test run (in `scripts/test.sh` and `fake_reset`), and keep the `midnight + N` tests as the only local-day coverage. [scripts/test.sh; tests/session_coordinator_test.c: fake_reset] (verification-gap+blind-hunter; medium)
+- [x] [Review][Patch] `test_long_recovery_tallies_only_current_local_day` casts `int64_t *` to `time_t *` and indexes `expected[phase - 1]` — undefined on a 32-bit `time_t`, and it relies on `SESSION_PHASE_SIT == 1`. Copy into a `time_t` local and index through an explicit phase-to-slot mapping. [tests/session_coordinator_test.c:904-906] (blind-hunter+edge-case-hunter; low)
+- [x] [Review][Patch] `test_failed_transition_has_no_tally_or_haptic` ends on `assert(fake_schedule_count >= 4)` — a lower bound that passes if retries schedule extra Wakeups. Assert the exact count. [tests/session_coordinator_test.c:564] (blind-hunter+acceptance-auditor; low)
+
+#### Rejected
+
+- false — Failed transition or recovery leaves wakeup_id -1 with no repair path until relaunch (edge-case-hunter, acceptance-auditor, blind-hunter): fixed at HEAD by the Story 1.2 review patch. `prv_wakeup_lost()` makes the clock check and every command reload the committed record and re-run recovery; `test_clock_check_retries_failed_due_transition` and `test_recovery_failure_exits_report_error_and_retry` cover it.
+- false — A callback or synthetic event with `wakeup_id == -1` passes the identity check: the OS only delivers non-negative ids, and `prv_reconcile_before_command` and the clock check both require `wakeup_id >= 0` before building a synthetic due event.
+- false — A transition that completes just before midnight and is processed after it is not counted: the spec counts completions "on their local completion day", so yesterday's completion correctly does not enter today's tally.
+- false — The 999 count cap is an unspecified magic number: `session_store_validate` rejects any count above 999, so saturating keeps the record writable.
+- false — Overdue recovery buzzes on any launch, not only a Wakeup launch: the spec's recovery row says "request at most one haptic" and the marker is persisted before the call, so there is no replay.
+- false — Clock check skips a due deadline when `wakeup_id` is -1 with no error: `prv_wakeup_lost()` routes that state to recovery at HEAD.
+- low — `get_view` enqueues a clock check, so UI rendering drives time processing: the coordinator is still the only mutator and it matches the existing 1 s render refresh; moving it to a coordinator-owned timer adds complexity with no named harm.
+- low — A full queue overwrites a visible CLOCK/STORAGE/WAKEUP error with QUEUE, and QUEUE is not cleared: requires 8 pending events within one tick; already deferred in Story 1.2's triage log and `deferred-work.md`.
+- low — `localtime()` returning NULL makes the catch-up loop walk every phase: not reachable on the watch, and the guard adds a branch.
+- low — A backward clock change past a day boundary resets the tally (`day != tally_day` instead of ordering): rare, arguably a different day, and the fix adds a branch.
+- low — A transition across local midnight leaves `tally_day` stale until the async rollover: it self-corrects on the next render and `prv_count_completion` resets on the next completion.
+- low — Invalid-clock branch of the clock check keeps a live Wakeup when `s_error` was already CLOCK: the callback then cancels itself in `prv_wakeup`, so there is no harm.
+- low — Redundant `wakeup_id = -1` assignments in `prv_recover`, 3600 s cycle-skip assumption, no midnight-boundary on-time test: cosmetic or already covered by the DST patch and the existing `midnight + N` tests.
+- rejected (spec edits) — `status: 'done'` vs sprint `review`, `review_loop_iteration: 0`, Verification section without run output, and the `epic-1-context.md` rewrite dropping the Story 1.8 checklist: every fix edits the spec or epic context, and the Story 1.8 checklist is still in full in `epics.md` (Story 1.8 AC).
