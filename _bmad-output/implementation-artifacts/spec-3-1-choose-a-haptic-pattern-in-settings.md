@@ -72,6 +72,8 @@ context:
 - Review-time change: the save-then-preview decision moved from the UI select handler into `haptic_settings_choose()` so the host tests cover the failed-save and preview matrix rows. The UI calls it and pops only on true.
 - Host stubs: second persist key, long/double vibes, `fake_haptic_pattern`; the preview path skips the marker assertion because it has no session.
 - Verified: `sh scripts/test.sh` passes (new haptic tests plus all existing tests unchanged). `sit_stand_move.c` was not built: no Pebble SDK in the sandbox. The Menu rows, Back, and window flow have no host test and need the emulator.
+- Emulator evidence (owner self-check, 2026-11-03, source: owner report; emulator, not Pebble Time 2): (1) menu order is Start, Settings when inactive and Pause/Resume, Skip, Stop, Settings when active; (2) the Settings window lists the patterns, marks the current choice with `* `, opens with the cursor on it, and saves, previews, and returns on select. The owner reported no problems. Not yet checked: restart persistence of the choice, Back leaving it unchanged, the preview feel, and anything on Pebble Time 2.
+- Build fix after the owner's SDK build (2026-11-03, commit `ddf4f48`): with `-fshort-enums` the pattern enum is unsigned, so `pattern < HAPTIC_PATTERN_SHORT` failed `-Wtype-limits` under `-Werror`. `haptic_settings_set` now compares as unsigned, and `scripts/test.sh` compiles with `-fshort-enums` so the host run catches this. The Review Triage Log row that rated this finding `false` was wrong: the host compiler could not show what the SDK compiler would do.
 
 ## Spec Change Log
 
