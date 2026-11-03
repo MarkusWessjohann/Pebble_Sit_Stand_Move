@@ -48,5 +48,9 @@ development_status:
   1-8-verify-the-finished-app-on-pebble-time-2-before-release: done
   epic-1-retrospective: optional
   epic-2: in-progress
-  2-1-enlarge-the-time-and-tally-and-place-button-labels-beside-the-buttons: review
+  2-1-enlarge-the-time-and-tally-and-place-button-labels-beside-the-buttons: done
   epic-2-retrospective: optional
+  epic-3: in-progress
+  3-1-choose-a-haptic-pattern-in-settings: review
+  3-2-repeat-the-alert-until-select-is-pressed: backlog
+  epic-3-retrospective: optional

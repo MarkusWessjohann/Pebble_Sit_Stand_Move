@@ -1,5 +1,7 @@
 #include "session_coordinator.h"
 
+#include "haptic_settings.h"
+
 #include <limits.h>
 #include <string.h>
 #include <time.h>
@@ -99,9 +101,11 @@ static void prv_reconcile_phase(SessionRecord *record, time_t now, bool overdue_
 }
 
 static void prv_request_haptic(void) {
-  APP_LOG(APP_LOG_LEVEL_INFO, "HAPTIC_REQUEST lc=%d phase=%d gen=%lu",
-          (int)s_record.lifecycle, (int)s_record.phase, (unsigned long)s_record.generation);
-  vibes_short_pulse();
+  HapticPattern pattern = haptic_settings_get();
+  APP_LOG(APP_LOG_LEVEL_INFO, "HAPTIC_REQUEST lc=%d phase=%d gen=%lu pattern=%d",
+          (int)s_record.lifecycle, (int)s_record.phase, (unsigned long)s_record.generation,
+          (int)pattern);
+  haptic_settings_vibrate(pattern);
 }
 
 static bool prv_next_generation(uint32_t current, uint32_t *next) {

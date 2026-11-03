@@ -26,6 +26,8 @@ int launch_reason(void);
 AppTimer *app_timer_register(uint32_t timeout_ms, AppTimerCallback callback, void *context);
 void app_timer_cancel(AppTimer *timer);
 void vibes_short_pulse(void);
+void vibes_long_pulse(void);
+void vibes_double_pulse(void);
 
 enum { APP_LOG_LEVEL_INFO = 100 };
 void fake_app_log(const char *format, ...) __attribute__((format(printf, 1, 2)));
@@ -51,3 +53,4 @@ extern WakeupId fake_last_cancelled_id;
 extern WakeupId fake_last_scheduled_id;
 extern time_t fake_last_scheduled_deadline;
 extern int fake_haptic_count;
+extern int fake_haptic_pattern;

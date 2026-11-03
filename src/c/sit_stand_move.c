@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <time.h>
 
+#include "haptic_settings.h"
 #include "session_coordinator.h"
 
 static Window *s_window;
@@ -14,6 +15,8 @@ static TextLayer *s_tally_layer;
 static TextLayer *s_error_layer;
 static Window *s_menu_window;
 static MenuLayer *s_menu_layer;
+static Window *s_settings_window;
+static MenuLayer *s_settings_layer;
 static AppTimer *s_refresh_timer;
 static char s_time_text[16];
 static char s_countdown_text[16];
@@ -155,7 +158,15 @@ static void prv_refresh(void *context) {
 static uint16_t prv_menu_num_rows(MenuLayer *menu_layer, uint16_t section_index, void *context) {
   SessionView view;
   session_coordinator_get_view(&view);
-  return view.record.lifecycle == SESSION_INACTIVE ? 1 : 3;
+  return view.record.lifecycle == SESSION_INACTIVE ? 2 : 4;
+}
+
+/* Settings is the last row in every lifecycle state and is handled here, never by the
+ * coordinator, whose row numbering stays as it was. */
+static bool prv_is_settings_row(uint16_t row) {
+  SessionView view;
+  session_coordinator_get_view(&view);
+  return row == (view.record.lifecycle == SESSION_INACTIVE ? 1 : 3);
 }
 
 static void prv_menu_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *cell_index,
@@ -163,7 +174,9 @@ static void prv_menu_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex 
   SessionView view;
   session_coordinator_get_view(&view);
   const char *title;
-  if (view.record.lifecycle == SESSION_INACTIVE) {
+  if (prv_is_settings_row(cell_index->row)) {
+    title = "Settings";
+  } else if (view.record.lifecycle == SESSION_INACTIVE) {
     title = "Start";
   } else if (cell_index->row == 0) {
     title = view.record.lifecycle == SESSION_RUNNING ? "Pause" : "Resume";
@@ -185,6 +198,10 @@ static void prv_render_cb(void *context) {
 static void prv_menu_select(MenuLayer *menu_layer, MenuIndex *cell_index, void *context) {
   (void)menu_layer;
   (void)context;
+  if (prv_is_settings_row(cell_index->row)) {
+    window_stack_push(s_settings_window, true);
+    return;
+  }
   session_coordinator_select_menu_row(cell_index->row);
   window_stack_pop(true);
   app_timer_register(5, prv_render_cb, NULL);
@@ -206,6 +223,54 @@ static void prv_menu_window_unload(Window *window) {
   (void)window;
   menu_layer_destroy(s_menu_layer);
   s_menu_layer = NULL;
+}
+
+static const char *const s_pattern_titles[] = { "Short", "Long", "Double" };
+static const char *const s_pattern_marked_titles[] = { "* Short", "* Long", "* Double" };
+#define PATTERN_COUNT 3
+
+static uint16_t prv_settings_num_rows(MenuLayer *menu_layer, uint16_t section_index,
+                                      void *context) {
+  return PATTERN_COUNT;
+}
+
+static void prv_settings_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *cell_index,
+                                  void *context) {
+  bool current = (int)haptic_settings_get() == cell_index->row;
+  menu_cell_basic_draw(ctx, cell_layer,
+                       current ? s_pattern_marked_titles[cell_index->row] :
+                                 s_pattern_titles[cell_index->row],
+                       NULL, NULL);
+}
+
+static void prv_settings_select(MenuLayer *menu_layer, MenuIndex *cell_index, void *context) {
+  (void)menu_layer;
+  (void)context;
+  if (haptic_settings_choose((HapticPattern)cell_index->row)) {
+    window_stack_pop(true);
+  }
+  /* On a failed save the window stays open with no preview: the mark not moving is the signal. */
+}
+
+static void prv_settings_window_load(Window *window) {
+  Layer *root = window_get_root_layer(window);
+  s_settings_layer = menu_layer_create(layer_get_bounds(root));
+  menu_layer_set_callbacks(s_settings_layer, NULL, (MenuLayerCallbacks){
+    .get_num_rows = prv_settings_num_rows,
+    .draw_row = prv_settings_draw_row,
+    .select_click = prv_settings_select,
+  });
+  menu_layer_set_selected_index(s_settings_layer,
+                                (MenuIndex){ .section = 0, .row = (uint16_t)haptic_settings_get() },
+                                MenuRowAlignCenter, false);
+  menu_layer_set_click_config_onto_window(s_settings_layer, window);
+  layer_add_child(root, menu_layer_get_layer(s_settings_layer));
+}
+
+static void prv_settings_window_unload(Window *window) {
+  (void)window;
+  menu_layer_destroy(s_settings_layer);
+  s_settings_layer = NULL;
 }
 
 static void prv_select_click_handler(ClickRecognizerRef recognizer, void *context) {
@@ -341,6 +406,11 @@ static void prv_init(void) {
     .load = prv_menu_window_load,
     .unload = prv_menu_window_unload,
   });
+  s_settings_window = window_create();
+  window_set_window_handlers(s_settings_window, (WindowHandlers){
+    .load = prv_settings_window_load,
+    .unload = prv_settings_window_unload,
+  });
   window_stack_push(s_window, true);
   s_refresh_timer = app_timer_register(1000, prv_refresh, NULL);
 }
@@ -350,6 +420,7 @@ static void prv_deinit(void) {
     app_timer_cancel(s_refresh_timer);
   }
   session_coordinator_deinit();
+  window_destroy(s_settings_window);
   window_destroy(s_menu_window);
   window_destroy(s_window);
 }

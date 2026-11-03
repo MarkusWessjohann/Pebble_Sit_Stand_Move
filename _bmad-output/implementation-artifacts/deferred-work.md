@@ -61,3 +61,12 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-2-rename-app-to-sit-stand-walk.md`
   summary: Check that "Sit Stand Walk" fits the Pebble launcher on small-screen platforms.
   evidence: Unverified (maybe-false, would be low-to-medium); needs an emulator or device look at the app list.
+
+## Deferred from: code review of spec-3-1-choose-a-haptic-pattern-in-settings (2026-11-03)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-1-choose-a-haptic-pattern-in-settings.md`
+  summary: Cover the Settings menu row mapping and Settings window flow with a host test, for example by moving the row count and Settings-row index into an SDK-free function that `scripts/test.sh` compiles.
+  evidence: `sit_stand_move.c` is not compiled by the host harness. Changing the Settings-row constant (`1`/`3`), dropping the early `return` in `prv_menu_select`, reordering `s_pattern_titles`, or popping on a failed save keeps every host test green. Same gap as Stories 1.6, 1.7, and 2.1; unverified until an emulator run.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-1-choose-a-haptic-pattern-in-settings.md`
+  summary: Check whether a lifecycle change while the menu is open (a wakeup ending a timed pause, or recovery) can make a menu row act on a different command than the one shown.
+  evidence: Unverified (medium if real). The row index is derived from live lifecycle at draw and again at select, as the pre-Settings menu already did; the Settings row only adds a constant offset. Settling it needs an emulator run with a wakeup firing while the menu is open.

@@ -1,5 +1,6 @@
 #define _POSIX_C_SOURCE 200112L
 #include "session_coordinator.h"
+#include "haptic_settings.h"
 
 #include <assert.h>
 #include <stdarg.h>
@@ -8,6 +9,7 @@
 #include <string.h>
 
 #define STORE_KEY 0x5353
+#define HAPTIC_KEY 0x5354
 
 struct AppTimer {
   AppTimerCallback callback;
@@ -17,6 +19,8 @@ struct AppTimer {
 
 static uint8_t s_persisted[64];
 static int s_persisted_size;
+static uint8_t s_haptic_persisted[64];
+static int s_haptic_persisted_size;
 static int s_write_attempts;
 static struct AppTimer s_timer;
 static WakeupHandler s_wakeup_handler;
@@ -38,6 +42,7 @@ WakeupId fake_last_cancelled_id;
 WakeupId fake_last_scheduled_id;
 time_t fake_last_scheduled_deadline;
 int fake_haptic_count;
+int fake_haptic_pattern = -1;
 char fake_log[4096];
 
 time_t fake_time(time_t *result) {
@@ -48,10 +53,20 @@ time_t fake_time(time_t *result) {
 }
 
 int persist_get_size(uint32_t key) {
+  if (key == HAPTIC_KEY) {
+    return s_haptic_persisted_size ? s_haptic_persisted_size : E_DOES_NOT_EXIST;
+  }
   return key == STORE_KEY && s_persisted_size ? s_persisted_size : E_DOES_NOT_EXIST;
 }
 
 int persist_read_data(uint32_t key, void *data, size_t size) {
+  if (key == HAPTIC_KEY) {
+    if (s_haptic_persisted_size != (int)size) {
+      return -1;
+    }
+    memcpy(data, s_haptic_persisted, size);
+    return s_haptic_persisted_size;
+  }
   if (key != STORE_KEY || s_persisted_size != (int)size) {
     return -1;
   }
@@ -60,6 +75,14 @@ int persist_read_data(uint32_t key, void *data, size_t size) {
 }
 
 int persist_write_data(uint32_t key, const void *data, size_t size) {
+  if (key == HAPTIC_KEY) {
+    if (fake_fail_write || size > sizeof(s_haptic_persisted)) {
+      return -1;
+    }
+    memcpy(s_haptic_persisted, data, size);
+    s_haptic_persisted_size = (int)size;
+    return s_haptic_persisted_size;
+  }
   ++s_write_attempts;
   if (key != STORE_KEY || fake_fail_write || size > sizeof(s_persisted)) {
     return -1;
@@ -112,12 +135,29 @@ void fake_app_log(const char *format, ...) {
   fake_log[used + 1] = '\0';
 }
 
-void vibes_short_pulse(void) {
-  SessionRecord stored;
-  bool found;
-  assert(session_store_load(&stored, &found) && found);
-  assert(stored.haptic_generation == stored.generation);
+static bool s_vibe_is_preview;
+
+static void prv_fake_vibe(int pattern) {
+  if (!s_vibe_is_preview) {
+    SessionRecord stored;
+    bool found;
+    assert(session_store_load(&stored, &found) && found);
+    assert(stored.haptic_generation == stored.generation);
+  }
+  fake_haptic_pattern = pattern;
   ++fake_haptic_count;
+}
+
+void vibes_short_pulse(void) {
+  prv_fake_vibe(HAPTIC_PATTERN_SHORT);
+}
+
+void vibes_long_pulse(void) {
+  prv_fake_vibe(HAPTIC_PATTERN_LONG);
+}
+
+void vibes_double_pulse(void) {
+  prv_fake_vibe(HAPTIC_PATTERN_DOUBLE);
 }
 
 void wakeup_service_subscribe(WakeupHandler handler) {
@@ -171,6 +211,8 @@ void fake_reset(void) {
   tzset();
   memset(s_persisted, 0, sizeof(s_persisted));
   s_persisted_size = 0;
+  memset(s_haptic_persisted, 0, sizeof(s_haptic_persisted));
+  s_haptic_persisted_size = 0;
   s_write_attempts = 0;
   memset(&s_timer, 0, sizeof(s_timer));
   s_wakeup_handler = NULL;
@@ -191,6 +233,7 @@ void fake_reset(void) {
   fake_last_scheduled_id = (WakeupId)-1;
   fake_last_scheduled_deadline = 0;
   fake_haptic_count = 0;
+  fake_haptic_pattern = -1;
   fake_log[0] = '\0';
 }
 
@@ -3126,8 +3169,144 @@ static void test_log_lines_report_callbacks_and_haptics(void) {
   assert(fake_haptic_count == 2);
 }
 
+static void prv_store_haptic_bytes(const uint8_t *bytes, size_t size) {
+  int written = persist_write_data(HAPTIC_KEY, bytes, size);
+  prv_check(written == (int)size, "persist_write_data haptic");
+}
+
+static void test_haptic_default_is_short_and_bad_values_fall_back(void) {
+  fake_reset();
+  assert(haptic_settings_get() == HAPTIC_PATTERN_SHORT);
+  prv_start_session();
+  session_coordinator_skip();
+  fake_run_timers();
+  assert(fake_haptic_count == 1);
+  assert(fake_haptic_pattern == HAPTIC_PATTERN_SHORT);
+  assert(strstr(fake_log, "HAPTIC_REQUEST lc=1 phase=2 gen="));
+  assert(strstr(fake_log, " pattern=0\n"));
+
+  const uint8_t out_of_range[] = { 3 };
+  const uint8_t wrong_size[] = { 1, 1 };
+  const uint8_t max_byte[] = { 255 };
+  prv_store_haptic_bytes(out_of_range, sizeof(out_of_range));
+  assert(haptic_settings_get() == HAPTIC_PATTERN_SHORT);
+  prv_store_haptic_bytes(max_byte, sizeof(max_byte));
+  assert(haptic_settings_get() == HAPTIC_PATTERN_SHORT);
+  prv_store_haptic_bytes(wrong_size, sizeof(wrong_size));
+  assert(haptic_settings_get() == HAPTIC_PATTERN_SHORT);
+  session_coordinator_skip();
+  fake_run_timers();
+  assert(fake_haptic_count == 2);
+  assert(fake_haptic_pattern == HAPTIC_PATTERN_SHORT);
+  assert(prv_view().error == SESSION_ERROR_NONE);
+}
+
+static void test_haptic_chosen_pattern_applies_to_every_request(void) {
+  const HapticPattern patterns[] = { HAPTIC_PATTERN_LONG, HAPTIC_PATTERN_DOUBLE };
+  for (size_t i = 0; i < sizeof(patterns) / sizeof(patterns[0]); ++i) {
+    HapticPattern pattern = patterns[i];
+    char want[16];
+    snprintf(want, sizeof(want), " pattern=%d\n", (int)pattern);
+
+    /* Skip. */
+    fake_reset();
+    assert(haptic_settings_set(pattern));
+    prv_start_session();
+    session_coordinator_skip();
+    fake_run_timers();
+    assert(fake_haptic_count == 1 && fake_haptic_pattern == (int)pattern);
+    assert(strstr(fake_log, want));
+
+    /* Automatic transition. */
+    SessionView view = prv_view();
+    fake_now = (time_t)view.record.deadline_utc;
+    fake_deliver_wakeup(view.record.wakeup_id, (int32_t)view.record.generation);
+    assert(fake_haptic_count == 2 && fake_haptic_pattern == (int)pattern);
+
+    /* Timed-pause end. */
+    fake_reset();
+    assert(haptic_settings_set(pattern));
+    prv_start_session();
+    session_coordinator_timed_pause(10 * 60);
+    fake_run_timers();
+    view = prv_view();
+    assert(view.record.lifecycle == SESSION_TIMED_PAUSED);
+    fake_now = (time_t)view.record.pause_deadline_utc;
+    fake_deliver_wakeup(view.record.wakeup_id, (int32_t)view.record.generation);
+    assert(prv_view().record.lifecycle == SESSION_RUNNING);
+    assert(fake_haptic_count == 1 && fake_haptic_pattern == (int)pattern);
+    assert(strstr(fake_log, want));
+  }
+}
+
+static void test_haptic_pattern_is_silent_for_other_commands_and_persists(void) {
+  fake_reset();
+  assert(haptic_settings_set(HAPTIC_PATTERN_DOUBLE));
+  session_coordinator_init();
+  fake_run_timers();
+  session_coordinator_start();
+  fake_run_timers();
+  session_coordinator_pause();
+  fake_run_timers();
+  session_coordinator_resume();
+  fake_run_timers();
+  session_coordinator_top_control();
+  fake_run_timers();
+  session_coordinator_bottom_control();
+  fake_run_timers();
+  session_coordinator_stop();
+  fake_run_timers();
+  assert(prv_view().record.lifecycle == SESSION_INACTIVE);
+  assert(fake_haptic_count == 0);
+  assert(strstr(fake_log, "HAPTIC_REQUEST") == NULL);
+
+  /* Stop, Start, and relaunch keep the pattern. */
+  assert(haptic_settings_get() == HAPTIC_PATTERN_DOUBLE);
+  session_coordinator_start();
+  fake_run_timers();
+  assert(fake_haptic_count == 0);
+  session_coordinator_deinit();
+  session_coordinator_init();
+  fake_run_timers();
+  assert(haptic_settings_get() == HAPTIC_PATTERN_DOUBLE);
+  session_coordinator_skip();
+  fake_run_timers();
+  assert(fake_haptic_count == 1 && fake_haptic_pattern == HAPTIC_PATTERN_DOUBLE);
+}
+
+static void test_haptic_setting_save_failure_keeps_stored_choice(void) {
+  fake_reset();
+  assert(haptic_settings_set(HAPTIC_PATTERN_LONG));
+  fake_fail_write = true;
+  assert(!haptic_settings_set(HAPTIC_PATTERN_DOUBLE));
+  fake_fail_write = false;
+  assert(haptic_settings_get() == HAPTIC_PATTERN_LONG);
+  assert(!haptic_settings_set((HapticPattern)3));
+  assert(haptic_settings_get() == HAPTIC_PATTERN_LONG);
+
+  /* Choosing a row with a failing save: no preview, window stays open (returns false). */
+  fake_fail_write = true;
+  s_vibe_is_preview = true;
+  assert(!haptic_settings_choose(HAPTIC_PATTERN_DOUBLE));
+  fake_fail_write = false;
+  assert(fake_haptic_count == 0);
+  assert(haptic_settings_get() == HAPTIC_PATTERN_LONG);
+
+  /* Choosing a row saves it and plays exactly one preview, independent of the haptic marker
+   * (it needs no session) and without a HAPTIC_REQUEST log line. */
+  assert(haptic_settings_choose(HAPTIC_PATTERN_DOUBLE));
+  s_vibe_is_preview = false;
+  assert(haptic_settings_get() == HAPTIC_PATTERN_DOUBLE);
+  assert(fake_haptic_count == 1 && fake_haptic_pattern == HAPTIC_PATTERN_DOUBLE);
+  assert(strstr(fake_log, "HAPTIC_REQUEST") == NULL);
+}
+
 int main(void) {
   test_start_and_stop();
+  test_haptic_default_is_short_and_bad_values_fall_back();
+  test_haptic_chosen_pattern_applies_to_every_request();
+  test_haptic_pattern_is_silent_for_other_commands_and_persists();
+  test_haptic_setting_save_failure_keeps_stored_choice();
   test_stale_callback_is_ignored();
   test_log_lines_report_callbacks_and_haptics();
   test_clock_schedule_and_storage_failures();
