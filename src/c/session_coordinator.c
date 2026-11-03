@@ -2,13 +2,13 @@
 
 #include "haptic_alert.h"
 #include "haptic_settings.h"
+#include "phase_settings.h"
 
 #include <limits.h>
 #include <string.h>
 #include <time.h>
 
 enum {
-  SESSION_DURATION_SECONDS = 45 * 60,
   SESSION_PAUSE_5_SECONDS = 5 * 60,
   SESSION_PAUSE_10_SECONDS = 10 * 60,
   SESSION_PAUSE_30_SECONDS = 30 * 60,
@@ -84,8 +84,10 @@ static void prv_reconcile_phase(SessionRecord *record, time_t now, bool overdue_
     today_start = (int64_t)mktime(&midnight);
   }
   if (today_start > 0 && record->deadline_utc < today_start) {
-    int64_t cycles = (today_start - record->deadline_utc) / 3600;
-    record->deadline_utc += cycles * 3600;
+    int64_t cycle = prv_duration(SESSION_PHASE_SIT) + prv_duration(SESSION_PHASE_STAND) +
+                    prv_duration(SESSION_PHASE_MOVE);
+    int64_t cycles = (today_start - record->deadline_utc) / cycle;
+    record->deadline_utc += cycles * cycle;
   }
   bool rebase = overdue_recovery;
   while (now >= record->deadline_utc) {
@@ -173,7 +175,8 @@ static void prv_start(void) {
     prv_invalid_time();
     return;
   }
-  if ((uint64_t)now > (uint64_t)INT32_MAX - SESSION_DURATION_SECONDS) {
+  int32_t duration = prv_duration(SESSION_PHASE_SIT);
+  if ((uint64_t)now > (uint64_t)INT32_MAX - (uint32_t)duration) {
     s_error = SESSION_ERROR_CLOCK;
     return;
   }
@@ -185,7 +188,7 @@ static void prv_start(void) {
     s_error = SESSION_ERROR_STORAGE;
     return;
   }
-  candidate.deadline_utc = (int64_t)now + SESSION_DURATION_SECONDS;
+  candidate.deadline_utc = (int64_t)now + duration;
   candidate.wakeup_id = (WakeupId)-1;
   WakeupId candidate_id;
   if (!prv_schedule(&candidate, &candidate_id)) {
@@ -675,8 +678,7 @@ static SessionPhase prv_next_phase(SessionPhase phase) {
 }
 
 static int32_t prv_duration(SessionPhase phase) {
-  return phase == SESSION_PHASE_SIT ? 45 * 60 :
-         phase == SESSION_PHASE_STAND ? 10 * 60 : 5 * 60;
+  return phase_settings_get_minutes(phase) * 60;
 }
 
 static int32_t prv_local_day(time_t now) {

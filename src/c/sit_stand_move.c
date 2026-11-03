@@ -4,6 +4,7 @@
 
 #include "haptic_alert.h"
 #include "haptic_settings.h"
+#include "phase_settings.h"
 #include "session_coordinator.h"
 
 static Window *s_window;
@@ -234,14 +235,28 @@ static const char *const s_pattern_marked_titles[] = {
   "* Short", "* Long", "* Double", "* Until Select"
 };
 #define PATTERN_COUNT HAPTIC_PATTERN_COUNT
+/* The length rows (Sit, Stand, Move) follow the haptic rows. */
+#define LENGTH_ROW_COUNT 3
+static const char *const s_length_names[LENGTH_ROW_COUNT] = { "Sit", "Stand", "Move" };
+static const SessionPhase s_length_phases[LENGTH_ROW_COUNT] = {
+  SESSION_PHASE_SIT, SESSION_PHASE_STAND, SESSION_PHASE_MOVE
+};
 
 static uint16_t prv_settings_num_rows(MenuLayer *menu_layer, uint16_t section_index,
                                       void *context) {
-  return PATTERN_COUNT;
+  return PATTERN_COUNT + LENGTH_ROW_COUNT;
 }
 
 static void prv_settings_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *cell_index,
                                   void *context) {
+  if (cell_index->row >= PATTERN_COUNT) {
+    int length_row = cell_index->row - PATTERN_COUNT;
+    char title[16];
+    snprintf(title, sizeof(title), "%s %d min", s_length_names[length_row],
+             phase_settings_get_minutes(s_length_phases[length_row]));
+    menu_cell_basic_draw(ctx, cell_layer, title, NULL, NULL);
+    return;
+  }
   bool current = (int)haptic_settings_get() == cell_index->row;
   menu_cell_basic_draw(ctx, cell_layer,
                        current ? s_pattern_marked_titles[cell_index->row] :
@@ -250,8 +265,14 @@ static void prv_settings_draw_row(GContext *ctx, const Layer *cell_layer, MenuIn
 }
 
 static void prv_settings_select(MenuLayer *menu_layer, MenuIndex *cell_index, void *context) {
-  (void)menu_layer;
   (void)context;
+  if (cell_index->row >= PATTERN_COUNT) {
+    /* A length row steps in place: no preview, the window stays open, and a failed save leaves
+     * the old value shown. */
+    phase_settings_step(s_length_phases[cell_index->row - PATTERN_COUNT]);
+    menu_layer_reload_data(menu_layer);
+    return;
+  }
   if (haptic_settings_choose((HapticPattern)cell_index->row)) {
     window_stack_pop(true);
   }

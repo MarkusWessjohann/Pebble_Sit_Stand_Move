@@ -2,6 +2,7 @@
 #include "session_coordinator.h"
 #include "haptic_alert.h"
 #include "haptic_settings.h"
+#include "phase_settings.h"
 
 #include <assert.h>
 #include <stdarg.h>
@@ -11,6 +12,7 @@
 
 #define STORE_KEY 0x5353
 #define HAPTIC_KEY 0x5354
+#define PHASE_KEY 0x5355
 
 struct AppTimer {
   AppTimerCallback callback;
@@ -22,6 +24,8 @@ static uint8_t s_persisted[64];
 static int s_persisted_size;
 static uint8_t s_haptic_persisted[64];
 static int s_haptic_persisted_size;
+static uint8_t s_phase_persisted[64];
+static int s_phase_persisted_size;
 static int s_write_attempts;
 static struct AppTimer s_timer;
 static struct AppTimer s_alert_timer;
@@ -58,6 +62,9 @@ time_t fake_time(time_t *result) {
 }
 
 int persist_get_size(uint32_t key) {
+  if (key == PHASE_KEY) {
+    return s_phase_persisted_size ? s_phase_persisted_size : E_DOES_NOT_EXIST;
+  }
   if (key == HAPTIC_KEY) {
     return s_haptic_persisted_size ? s_haptic_persisted_size : E_DOES_NOT_EXIST;
   }
@@ -65,6 +72,13 @@ int persist_get_size(uint32_t key) {
 }
 
 int persist_read_data(uint32_t key, void *data, size_t size) {
+  if (key == PHASE_KEY) {
+    if (s_phase_persisted_size != (int)size) {
+      return -1;
+    }
+    memcpy(data, s_phase_persisted, size);
+    return s_phase_persisted_size;
+  }
   if (key == HAPTIC_KEY) {
     if (s_haptic_persisted_size != (int)size) {
       return -1;
@@ -80,6 +94,14 @@ int persist_read_data(uint32_t key, void *data, size_t size) {
 }
 
 int persist_write_data(uint32_t key, const void *data, size_t size) {
+  if (key == PHASE_KEY) {
+    if (fake_fail_write || size > sizeof(s_phase_persisted)) {
+      return -1;
+    }
+    memcpy(s_phase_persisted, data, size);
+    s_phase_persisted_size = (int)size;
+    return s_phase_persisted_size;
+  }
   if (key == HAPTIC_KEY) {
     if (fake_fail_write || size > sizeof(s_haptic_persisted)) {
       return -1;
@@ -243,6 +265,8 @@ void fake_reset(void) {
   s_persisted_size = 0;
   memset(s_haptic_persisted, 0, sizeof(s_haptic_persisted));
   s_haptic_persisted_size = 0;
+  memset(s_phase_persisted, 0, sizeof(s_phase_persisted));
+  s_phase_persisted_size = 0;
   s_write_attempts = 0;
   memset(&s_timer, 0, sizeof(s_timer));
   memset(&s_alert_timer, 0, sizeof(s_alert_timer));
@@ -3618,8 +3642,259 @@ static void test_other_patterns_never_repeat(void) {
   }
 }
 
+static void prv_set_minutes(int sit, int stand, int move) {
+  const uint8_t value[3] = { (uint8_t)sit, (uint8_t)stand, (uint8_t)move };
+  int written = persist_write_data(PHASE_KEY, value, sizeof(value));
+  prv_check(written == 3, "phase lengths written");
+}
+
+static void prv_advance_to_deadline_and_deliver(void) {
+  SessionView view = prv_view();
+  fake_now = (time_t)view.record.deadline_utc;
+  fake_deliver_wakeup(view.record.wakeup_id, (int32_t)view.record.generation);
+}
+
+static void test_phase_lengths_default_step_wrap_and_save_failure(void) {
+  fake_reset();
+  assert(phase_settings_get_minutes(SESSION_PHASE_SIT) == 45);
+  assert(phase_settings_get_minutes(SESSION_PHASE_STAND) == 10);
+  assert(phase_settings_get_minutes(SESSION_PHASE_MOVE) == 5);
+
+  assert(phase_settings_step(SESSION_PHASE_SIT));
+  assert(phase_settings_get_minutes(SESSION_PHASE_SIT) == 50);
+  assert(phase_settings_get_minutes(SESSION_PHASE_STAND) == 10);
+  assert(phase_settings_get_minutes(SESSION_PHASE_MOVE) == 5);
+
+  prv_set_minutes(45, 60, 5);
+  assert(phase_settings_step(SESSION_PHASE_STAND));
+  assert(phase_settings_get_minutes(SESSION_PHASE_STAND) == 5);
+  prv_set_minutes(45, 10, 60);
+  assert(phase_settings_step(SESSION_PHASE_MOVE));
+  assert(phase_settings_get_minutes(SESSION_PHASE_MOVE) == 5);
+
+  /* Twelve steps walk the full 5..60 range and return to the start. */
+  prv_set_minutes(45, 10, 5);
+  for (int i = 0; i < 12; ++i) {
+    assert(phase_settings_step(SESSION_PHASE_MOVE));
+  }
+  assert(phase_settings_get_minutes(SESSION_PHASE_MOVE) == 5);
+
+  prv_set_minutes(45, 10, 5);
+  fake_fail_write = true;
+  assert(!phase_settings_step(SESSION_PHASE_SIT));
+  fake_fail_write = false;
+  assert(phase_settings_get_minutes(SESSION_PHASE_SIT) == 45);
+  assert(!phase_settings_step(SESSION_PHASE_NONE));
+  assert(phase_settings_get_minutes(SESSION_PHASE_SIT) == 45);
+}
+
+static void test_phase_lengths_invalid_stored_falls_back_per_phase(void) {
+  fake_reset();
+  const uint8_t two[2] = { 20, 20 };
+  assert(persist_write_data(PHASE_KEY, two, sizeof(two)) == 2);
+  assert(phase_settings_get_minutes(SESSION_PHASE_SIT) == 45);
+  assert(phase_settings_get_minutes(SESSION_PHASE_STAND) == 10);
+  assert(phase_settings_get_minutes(SESSION_PHASE_MOVE) == 5);
+
+  const uint8_t four[4] = { 20, 20, 20, 20 };
+  assert(persist_write_data(PHASE_KEY, four, sizeof(four)) == 4);
+  assert(phase_settings_get_minutes(SESSION_PHASE_SIT) == 45);
+  assert(phase_settings_get_minutes(SESSION_PHASE_MOVE) == 5);
+
+  static const uint8_t bad[] = { 0, 65, 7, 255, 61, 4 };
+  for (size_t i = 0; i < sizeof(bad); ++i) {
+    prv_set_minutes(bad[i], 20, 15);
+    assert(phase_settings_get_minutes(SESSION_PHASE_SIT) == 45);
+    assert(phase_settings_get_minutes(SESSION_PHASE_STAND) == 20);
+    assert(phase_settings_get_minutes(SESSION_PHASE_MOVE) == 15);
+    prv_set_minutes(30, bad[i], 15);
+    assert(phase_settings_get_minutes(SESSION_PHASE_SIT) == 30);
+    assert(phase_settings_get_minutes(SESSION_PHASE_STAND) == 10);
+    assert(phase_settings_get_minutes(SESSION_PHASE_MOVE) == 15);
+    prv_set_minutes(30, 20, bad[i]);
+    assert(phase_settings_get_minutes(SESSION_PHASE_SIT) == 30);
+    assert(phase_settings_get_minutes(SESSION_PHASE_STAND) == 20);
+    assert(phase_settings_get_minutes(SESSION_PHASE_MOVE) == 5);
+  }
+
+  /* A step on a record with one bad byte repairs that byte from its default and keeps the rest. */
+  prv_set_minutes(7, 20, 15);
+  assert(phase_settings_step(SESSION_PHASE_STAND));
+  assert(phase_settings_get_minutes(SESSION_PHASE_SIT) == 45);
+  assert(phase_settings_get_minutes(SESSION_PHASE_STAND) == 25);
+  assert(phase_settings_get_minutes(SESSION_PHASE_MOVE) == 15);
+}
+
+static void test_phase_lengths_start_and_cycle_use_configured_values(void) {
+  fake_reset();
+  prv_set_minutes(30, 20, 15);
+  prv_start_session();
+  SessionView view = prv_view();
+  assert(view.record.phase == SESSION_PHASE_SIT);
+  assert(view.record.deadline_utc == fake_now + 30 * 60);
+
+  prv_advance_to_deadline_and_deliver();
+  view = prv_view();
+  assert(view.record.phase == SESSION_PHASE_STAND);
+  assert(view.record.deadline_utc == fake_now + 20 * 60);
+  prv_advance_to_deadline_and_deliver();
+  view = prv_view();
+  assert(view.record.phase == SESSION_PHASE_MOVE);
+  assert(view.record.deadline_utc == fake_now + 15 * 60);
+  prv_advance_to_deadline_and_deliver();
+  view = prv_view();
+  assert(view.record.phase == SESSION_PHASE_SIT);
+  assert(view.record.deadline_utc == fake_now + 30 * 60);
+  /* Completions count regardless of length. */
+  assert(view.record.sit_count == 1 && view.record.stand_count == 1 && view.record.move_count == 1);
+}
+
+static void test_phase_lengths_change_applies_only_to_phases_that_start_later(void) {
+  fake_reset();
+  prv_start_session();
+  SessionView view = prv_view();
+  int64_t sit_deadline = view.record.deadline_utc;
+  WakeupId id = view.record.wakeup_id;
+  uint32_t generation = view.record.generation;
+  int schedules = fake_schedule_count;
+
+  prv_set_minutes(45, 20, 5);
+  view = prv_view();
+  assert(view.record.deadline_utc == sit_deadline);
+  assert(view.record.wakeup_id == id && view.record.generation == generation);
+  assert(fake_schedule_count == schedules);
+
+  prv_advance_to_deadline_and_deliver();
+  view = prv_view();
+  assert(view.record.phase == SESSION_PHASE_STAND);
+  assert(view.record.deadline_utc == sit_deadline + 20 * 60);
+
+  /* A running Stand keeps its deadline when Stand itself changes; Move applies at the next start. */
+  int64_t stand_deadline = view.record.deadline_utc;
+  prv_set_minutes(45, 35, 25);
+  assert(prv_view().record.deadline_utc == stand_deadline);
+  prv_advance_to_deadline_and_deliver();
+  view = prv_view();
+  assert(view.record.phase == SESSION_PHASE_MOVE);
+  assert(view.record.deadline_utc == stand_deadline + 25 * 60);
+}
+
+static void test_phase_lengths_paused_remaining_time_is_unchanged(void) {
+  fake_reset();
+  prv_start_session();
+  fake_now += 600;
+  session_coordinator_pause();
+  fake_run_timers();
+  int32_t remaining = prv_view().record.remaining_seconds;
+  assert(remaining == 35 * 60);
+  prv_set_minutes(10, 10, 5);
+  assert(prv_view().record.remaining_seconds == remaining);
+  session_coordinator_resume();
+  fake_run_timers();
+  assert(prv_view().record.deadline_utc == fake_now + remaining);
+
+  session_coordinator_timed_pause(5 * 60);
+  fake_run_timers();
+  prv_set_minutes(60, 10, 5);
+  assert(prv_view().record.remaining_seconds == remaining);
+  assert(prv_view().record.pause_duration_seconds == 5 * 60);
+  session_coordinator_resume();
+  fake_run_timers();
+  assert(prv_view().record.deadline_utc == fake_now + remaining);
+}
+
+static void test_phase_lengths_skip_uses_configured_length_of_next_phase(void) {
+  fake_reset();
+  prv_set_minutes(45, 10, 15);
+  prv_start_session();
+  session_coordinator_skip();
+  fake_run_timers();
+  SessionView view = prv_view();
+  assert(view.record.phase == SESSION_PHASE_STAND);
+  assert(view.record.deadline_utc == fake_now + 10 * 60);
+  session_coordinator_skip();
+  fake_run_timers();
+  view = prv_view();
+  assert(view.record.phase == SESSION_PHASE_MOVE);
+  assert(view.record.deadline_utc == fake_now + 15 * 60);
+  assert(view.record.sit_count == 0 && view.record.stand_count == 0 && view.record.move_count == 0);
+}
+
+static void test_phase_lengths_persist_across_stop_start_and_relaunch(void) {
+  fake_reset();
+  prv_set_minutes(20, 15, 10);
+  prv_start_session();
+  assert(prv_view().record.deadline_utc == fake_now + 20 * 60);
+  session_coordinator_stop();
+  fake_run_timers();
+  assert(prv_view().record.lifecycle == SESSION_INACTIVE);
+  session_coordinator_start();
+  fake_run_timers();
+  assert(prv_view().record.deadline_utc == fake_now + 20 * 60);
+
+  session_coordinator_deinit();
+  session_coordinator_init();
+  fake_run_timers();
+  assert(phase_settings_get_minutes(SESSION_PHASE_SIT) == 20);
+  assert(phase_settings_get_minutes(SESSION_PHASE_STAND) == 15);
+  assert(phase_settings_get_minutes(SESSION_PHASE_MOVE) == 10);
+  assert(prv_view().record.deadline_utc == fake_now + 20 * 60);
+}
+
+static void test_phase_lengths_overdue_recovery_uses_configured_cycle_sum(void) {
+  static const int64_t offsets[] = { 100000, 2400, 2401, 86400, 3 * 86400 + 1234, 200000 };
+  for (size_t i = 0; i < sizeof(offsets) / sizeof(offsets[0]); ++i) {
+    fake_reset();
+    prv_set_minutes(30, 5, 5);
+    int64_t today_start = (int64_t)fake_now - (int64_t)fake_now % 86400;
+    SessionRecord record = {
+      .lifecycle = SESSION_RUNNING,
+      .phase = SESSION_PHASE_SIT,
+      .generation = 4,
+      .deadline_utc = today_start - offsets[i],
+      .wakeup_id = 55,
+    };
+    prv_save(&record);
+    session_coordinator_init();
+    fake_run_timers();
+    /* Independent model: whole 40-minute cycles keep the Sit end phase, then the walk continues. */
+    int64_t base = today_start - offsets[i] % 2400;
+    int64_t x = (int64_t)fake_now - base;
+    int64_t pos = x % 2400;
+    SessionPhase expected = pos < 300 ? SESSION_PHASE_STAND : pos < 600 ? SESSION_PHASE_MOVE :
+                                                                          SESSION_PHASE_SIT;
+    SessionView view = prv_view();
+    assert(view.error == SESSION_ERROR_NONE);
+    assert(view.record.phase == expected);
+    assert(view.record.deadline_utc == fake_now + (expected == SESSION_PHASE_SIT ? 30 : 5) * 60);
+    session_coordinator_deinit();
+  }
+}
+
+static void test_phase_lengths_do_not_change_pause_choices_or_extend(void) {
+  fake_reset();
+  prv_set_minutes(60, 5, 5);
+  prv_start_session();
+  int64_t deadline = prv_view().record.deadline_utc;
+  assert(session_coordinator_top_control());
+  fake_run_timers();
+  assert(prv_view().record.deadline_utc == deadline + 5 * 60);
+  session_coordinator_timed_pause(10 * 60);
+  fake_run_timers();
+  assert(prv_view().record.pause_deadline_utc == fake_now + 10 * 60);
+}
+
 int main(void) {
   test_start_and_stop();
+  test_phase_lengths_default_step_wrap_and_save_failure();
+  test_phase_lengths_invalid_stored_falls_back_per_phase();
+  test_phase_lengths_start_and_cycle_use_configured_values();
+  test_phase_lengths_change_applies_only_to_phases_that_start_later();
+  test_phase_lengths_paused_remaining_time_is_unchanged();
+  test_phase_lengths_skip_uses_configured_length_of_next_phase();
+  test_phase_lengths_persist_across_stop_start_and_relaunch();
+  test_phase_lengths_overdue_recovery_uses_configured_cycle_sum();
+  test_phase_lengths_do_not_change_pause_choices_or_extend();
   test_haptic_default_is_short_and_bad_values_fall_back();
   test_haptic_chosen_pattern_applies_to_every_request();
   test_haptic_pattern_is_silent_for_other_commands_and_persists();

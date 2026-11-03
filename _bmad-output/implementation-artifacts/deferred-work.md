@@ -79,3 +79,12 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-2-repeat-the-alert-until-select-is-pressed.md`
   summary: Decide whether Select should also dismiss a repeating alert while the menu or Settings window is on top.
   evidence: Owner decision 2A (2026-11-03) limits dismissal to the session view, so an alert that starts while a menu is open keeps vibrating until the owner backs out, or until the 2-minute cap. Revisit if that proves annoying in use.
+
+## Deferred from: code review of spec-4-1-set-the-length-of-sit-stand-and-move-in-settings (2026-11-03)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-1-set-the-length-of-sit-stand-and-move-in-settings.md`
+  summary: On the emery emulator and Pebble Time 2, check the seven-row Settings window: `Stand 60 min` fits without clipping, the list scrolls, the selection stays on the stepped row after the reload, and a step plays no preview and keeps the window open.
+  evidence: `sit_stand_move.c` is not compiled by the host harness and the sandbox has no Pebble SDK. Breaking the row index math, the reload, or the stay-open behavior keeps every host test green. Same gap as Stories 1.6, 1.7, 2.1, 3.1, and 3.2.
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-1-set-the-length-of-sit-stand-and-move-in-settings.md`
+  summary: Amend the PRD (section 7.2, out of scope: "User-configurable default Phase lengths") and the architecture spine (AD-6 and the "Default durations" convention) so they no longer say the lengths are fixed.
+  evidence: Epic 4 and `epics.md` (FR12 to FR15, NFR7 amended) allow configurable lengths, but the PRD and architecture still state the opposite, so the planning documents contradict each other.
