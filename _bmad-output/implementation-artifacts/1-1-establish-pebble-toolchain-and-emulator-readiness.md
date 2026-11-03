@@ -2,13 +2,15 @@
 title: 'Establish Pebble toolchain readiness and emulator evidence'
 type: 'feature'
 created: '2026-10-23'
-status: 'in-progress'
+status: 'done'
 baseline_commit: 'cca3e12d1c48944a2cfd1bb39ae732c2d5dee7c0'
 route: 'dispatch'
 review_loop_iteration: 0
 context:
   - _bmad-output/implementation-artifacts/epic-1-context.md
 ---
+
+**Closed by owner waiver (2026-11-03):** The owner set Story 1.1 to done. AC1 to AC3 were not met and AC5 says an incomplete story is not marked done, so this is a waiver, not acceptance. Still unrecorded: a build shown running under the project-locked Pebble Tool 5.0.40, complete clean and repeated build/install output with artifact identity, and the emulator Wakeup revision, version, callback, haptic-request, foreground and timing observations. Nothing below was changed. The 2026-11-02 status paragraph is kept as history.
 
 **Current status (2026-11-02):** 2 of 5 acceptance criteria are met; AC1 to AC3 are open. The local C coordinator and four wrapper tests pass, and the uv lockfile check passes. The owner supplied `pebble --version` output from the external host: `Pebble Tool v5.1.2 (active SDK: v4.33.1)`, and identified `pebble install --emulator emery --logs` as the emulator command. The owner confirms the phase-deadline and timed-pause emulator tests were run and worked. AC3 remains open because the tested revision, emulator version, callback/haptic-request/foreground observations, and timing were not supplied. On 2026-11-03 the owner supplied raw `uv run --locked` output showing Pebble Tool v5.0.40 with active SDK v4.33.1, so the locked CLI and active SDK are now evidenced. The owner also pasted `build/config.log`, which gives the 4.33.1 toolchain path, but its PATH points at the global uv tool environment rather than the project-locked one, so AC1 stays open until a build is shown running under the locked CLI. AC2 still needs complete output/artifact identity for clean and repeated builds/installs. The Pebble CLI and emulator are unavailable only inside this sandbox; the owner reports the external host tools and emulator are working. Physical Pebble Time 2 acceptance belongs to Story 1.8. Open owner decisions are listed under Implementation Notes.
 
