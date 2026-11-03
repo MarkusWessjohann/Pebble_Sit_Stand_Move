@@ -72,6 +72,7 @@ static void prv_reconcile_phase(SessionRecord *record, time_t now, bool overdue_
     midnight.tm_hour = 0;
     midnight.tm_min = 0;
     midnight.tm_sec = 0;
+    midnight.tm_isdst = -1;
     today_start = (int64_t)mktime(&midnight);
   }
   if (today_start > 0 && record->deadline_utc < today_start) {
@@ -133,6 +134,18 @@ static void prv_invalid_time(void) {
     s_record.wakeup_id = (WakeupId)-1;
   }
   s_error = SESSION_ERROR_CLOCK;
+}
+
+/* A consumed Wakeup that could not be replaced: never present it as scheduled. The committed
+ * record is still authoritative, and the next clock check reloads and repairs it. */
+static void prv_lose_wakeup(SessionError error) {
+  s_record.wakeup_id = (WakeupId)-1;
+  s_error = error;
+}
+
+static bool prv_wakeup_lost(void) {
+  return (s_record.lifecycle == SESSION_RUNNING || s_record.lifecycle == SESSION_TIMED_PAUSED) &&
+         s_record.wakeup_id < 0;
 }
 
 static void prv_start(void) {
@@ -457,7 +470,6 @@ static void prv_recover(void) {
       s_error = SESSION_ERROR_CLOCK;
       return;
     }
-    WakeupId old_id = resumed.wakeup_id;
     resumed.lifecycle = SESSION_RUNNING;
     resumed.deadline_utc = (int64_t)now + resumed.remaining_seconds;
     resumed.remaining_seconds = 0;
@@ -482,7 +494,6 @@ static void prv_recover(void) {
       return;
     }
     s_record = resumed;
-    wakeup_cancel(old_id);
     prv_request_haptic();
     s_error = SESSION_ERROR_NONE;
     return;
@@ -582,7 +593,7 @@ static void prv_reset_tally_day(SessionRecord *record, int32_t day) {
 
 static void prv_rollover_tally(time_t now) {
   int32_t day = prv_local_day(now);
-  if (day == 0 || day == s_record.tally_day) {
+  if (day == 0 || day == s_record.tally_day || prv_wakeup_lost()) {
     return;
   }
   SessionRecord candidate = s_record;
@@ -605,9 +616,8 @@ static void prv_wakeup(const SessionEvent *event) {
   }
   time_t now;
   if (!prv_read_utc(&now)) {
-    s_error = SESSION_ERROR_CLOCK;
     wakeup_cancel(event->wakeup_id);
-    s_record.wakeup_id = (WakeupId)-1;
+    prv_lose_wakeup(SESSION_ERROR_CLOCK);
     return;
   }
   int64_t deadline = prv_active_deadline(&s_record);
@@ -616,13 +626,13 @@ static void prv_wakeup(const SessionEvent *event) {
     WakeupId old_id = s_record.wakeup_id;
     WakeupId id;
     if (!prv_schedule(&candidate, &id)) {
-      s_error = SESSION_ERROR_WAKEUP;
+      prv_lose_wakeup(SESSION_ERROR_WAKEUP);
       return;
     }
     candidate.wakeup_id = id;
     if (!session_store_save(&candidate)) {
       wakeup_cancel(id);
-      s_error = SESSION_ERROR_STORAGE;
+      prv_lose_wakeup(SESSION_ERROR_STORAGE);
       return;
     }
     s_record = candidate;
@@ -634,7 +644,7 @@ static void prv_wakeup(const SessionEvent *event) {
     SessionRecord candidate = s_record;
     int32_t remaining = candidate.remaining_seconds;
     if ((uint64_t)now > (uint64_t)INT32_MAX - (uint32_t)remaining) {
-      s_error = SESSION_ERROR_CLOCK;
+      prv_lose_wakeup(SESSION_ERROR_CLOCK);
       return;
     }
     candidate.lifecycle = SESSION_RUNNING;
@@ -644,21 +654,21 @@ static void prv_wakeup(const SessionEvent *event) {
     candidate.pause_duration_seconds = 0;
     prv_reset_tally_day(&candidate, prv_local_day(now));
     if (!prv_next_generation(candidate.generation, &candidate.generation)) {
-      s_error = SESSION_ERROR_STORAGE;
+      prv_lose_wakeup(SESSION_ERROR_STORAGE);
       return;
     }
     candidate.haptic_generation = candidate.generation;
     candidate.wakeup_id = (WakeupId)-1;
     WakeupId id;
     if (!prv_schedule(&candidate, &id)) {
-      s_error = SESSION_ERROR_WAKEUP;
+      prv_lose_wakeup(SESSION_ERROR_WAKEUP);
       return;
     }
     WakeupId old_id = s_record.wakeup_id;
     candidate.wakeup_id = id;
     if (!session_store_save(&candidate)) {
       wakeup_cancel(id);
-      s_error = SESSION_ERROR_STORAGE;
+      prv_lose_wakeup(SESSION_ERROR_STORAGE);
       return;
     }
     s_record = candidate;
@@ -671,7 +681,7 @@ static void prv_wakeup(const SessionEvent *event) {
   SessionRecord candidate = s_record;
   prv_reconcile_phase(&candidate, now, false);
   if (!prv_next_generation(candidate.generation, &candidate.generation)) {
-    s_error = SESSION_ERROR_STORAGE;
+    prv_lose_wakeup(SESSION_ERROR_STORAGE);
     return;
   }
   candidate.haptic_generation = candidate.generation;
@@ -679,14 +689,14 @@ static void prv_wakeup(const SessionEvent *event) {
   candidate.remaining_seconds = 0;
   WakeupId id;
   if (!prv_schedule(&candidate, &id)) {
-    s_error = SESSION_ERROR_WAKEUP;
+    prv_lose_wakeup(SESSION_ERROR_WAKEUP);
     return;
   }
   WakeupId old_id = s_record.wakeup_id;
   candidate.wakeup_id = id;
   if (!session_store_save(&candidate)) {
     wakeup_cancel(id);
-    s_error = SESSION_ERROR_STORAGE;
+    prv_lose_wakeup(SESSION_ERROR_STORAGE);
     return;
   }
   s_record = candidate;
@@ -716,7 +726,7 @@ static void prv_process(const SessionEvent *event) {
         }
         return;
       }
-      if (was_clock_error) {
+      if (was_clock_error || prv_wakeup_lost()) {
         SessionRecord committed;
         bool found;
         if (!session_store_load(&committed, &found) || !found) {
@@ -742,13 +752,19 @@ static void prv_process(const SessionEvent *event) {
                     event->type == EVENT_CHANGE_TIMED_PAUSE ||
                     event->type == EVENT_MIDDLE_CONTROL ||
                     event->type == EVENT_TOP_CONTROL || event->type == EVENT_BOTTOM_CONTROL;
-  if (is_command && (s_record.lifecycle == SESSION_RUNNING ||
-                     s_record.lifecycle == SESSION_TIMED_PAUSED)) {
+  bool is_stop = event->type == EVENT_STOP ||
+                 (event->type == EVENT_MENU_SELECT && event->row == 2);
+  bool active = s_record.lifecycle == SESSION_RUNNING ||
+                s_record.lifecycle == SESSION_TIMED_PAUSED;
+  if (is_stop && active && !prv_read_utc(&now)) {
+    /* Stop needs no timestamp, so an invalid clock must not keep the user from ending the
+     * session. A failed due reconcile with a valid clock still blocks Stop (Story 1.3 decision). */
+  } else if (is_command && active) {
     if (!prv_read_utc(&now)) {
       prv_invalid_time();
       return;
     }
-    if (s_error == SESSION_ERROR_CLOCK) {
+    if (s_error == SESSION_ERROR_CLOCK || prv_wakeup_lost()) {
       SessionRecord committed;
       bool found;
       if (!session_store_load(&committed, &found) || !found) {

@@ -41,6 +41,7 @@ extern bool fake_fail_write;
 extern int fake_schedule_count;
 extern int fake_cancel_count;
 extern int fake_cancel_all_count;
+extern WakeupId fake_last_cancelled_id;
 extern WakeupId fake_last_scheduled_id;
 extern time_t fake_last_scheduled_deadline;
 extern int fake_haptic_count;

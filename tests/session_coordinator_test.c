@@ -1,3 +1,4 @@
+#define _POSIX_C_SOURCE 200112L
 #include "session_coordinator.h"
 
 #include <assert.h>
@@ -32,6 +33,7 @@ bool fake_fail_write;
 int fake_schedule_count;
 int fake_cancel_count;
 int fake_cancel_all_count;
+WakeupId fake_last_cancelled_id;
 WakeupId fake_last_scheduled_id;
 time_t fake_last_scheduled_deadline;
 int fake_haptic_count;
@@ -86,7 +88,7 @@ WakeupId wakeup_schedule(time_t timestamp, int32_t cookie, bool notify_if_missed
 }
 
 void wakeup_cancel(WakeupId id) {
-  (void)id;
+  fake_last_cancelled_id = id;
   ++fake_cancel_count;
 }
 
@@ -149,6 +151,8 @@ void fake_deliver_wakeup(WakeupId id, int32_t cookie) {
 }
 
 void fake_reset(void) {
+  setenv("TZ", "UTC", 1);
+  tzset();
   memset(s_persisted, 0, sizeof(s_persisted));
   s_persisted_size = 0;
   s_write_attempts = 0;
@@ -167,6 +171,7 @@ void fake_reset(void) {
   fake_schedule_count = 0;
   fake_cancel_count = 0;
   fake_cancel_all_count = 0;
+  fake_last_cancelled_id = (WakeupId)-2;
   fake_last_scheduled_id = (WakeupId)-1;
   fake_last_scheduled_deadline = 0;
   fake_haptic_count = 0;
@@ -221,6 +226,7 @@ static void test_start_and_stop(void) {
   assert(view.record.lifecycle == SESSION_INACTIVE);
   assert(view.record.wakeup_id == (WakeupId)-1);
   assert(fake_cancel_count == 1);
+  assert(fake_last_cancelled_id == old_id);
 
   fake_deliver_wakeup(old_id, old_generation);
   assert(prv_view().record.lifecycle == SESSION_INACTIVE);
@@ -268,6 +274,7 @@ static void test_clock_schedule_and_storage_failures(void) {
   assert(view.record.lifecycle == SESSION_INACTIVE);
   assert(view.error == SESSION_ERROR_STORAGE);
   assert(fake_cancel_count == cancelled_before + 1);
+  assert(fake_last_cancelled_id == fake_last_scheduled_id);
 
   fake_fail_write = false;
   fake_now = (time_t)INT32_MAX - 45 * 60;
@@ -312,6 +319,8 @@ static void test_deadline_callback_and_command_reconciliation(void) {
   assert(view.record.sit_count == 1);
   assert(view.record.haptic_generation == view.record.generation);
   assert(fake_haptic_count == 1);
+  assert(fake_last_cancelled_id == first_id);
+  WakeupId second_id = view.record.wakeup_id;
 
   fake_deliver_wakeup(first_id, first_generation);
   view = prv_view();
@@ -326,6 +335,9 @@ static void test_deadline_callback_and_command_reconciliation(void) {
   assert(view.record.lifecycle == SESSION_INACTIVE);
   assert(fake_schedule_count == 3);
   assert(fake_cancel_count == 3);
+  /* The due Stand Wakeup is replaced by Move's, and Stop then cancels Move's. */
+  assert(fake_last_scheduled_id != second_id);
+  assert(fake_last_cancelled_id == fake_last_scheduled_id);
 }
 
 static void test_forward_clock_change_reconciles_due_deadline(void) {
@@ -548,11 +560,15 @@ static void test_failed_transition_has_no_tally_or_haptic(void) {
   assert(view.record.sit_count == 0);
   assert(fake_haptic_count == 0);
 
+  /* Start, the failed Wakeup transition, and the clock-check repair whose save failed. */
+  assert(fake_schedule_count == 3);
   fake_fail_write = false;
   session_coordinator_recover();
   fake_run_timers();
   view = prv_view();
-  assert(fake_schedule_count >= 4);
+  /* The pending clock check repairs the lost Wakeup and commits Stand (4); the explicit recovery
+   * then only reschedules the same committed deadline (5). */
+  assert(fake_schedule_count == 5);
   assert(view.record.phase == SESSION_PHASE_STAND);
   assert(view.record.sit_count == 1);
   assert(fake_haptic_count == 1);
@@ -888,13 +904,15 @@ static void test_long_recovery_tallies_only_current_local_day(void) {
   time_t midnight = mktime(&local);
   fake_now = midnight + 12 * 3600;
   int32_t today = (local.tm_year + 1900) * 1000 + local.tm_yday;
-  uint16_t expected[3] = { 0, 0, 0 };
+  uint16_t expected[3] = { 0, 0, 0 }; /* Sit, Stand, Move */
   int64_t deadline = midnight - 40 * 3600;
   SessionPhase phase = SESSION_PHASE_SIT;
   while (deadline <= fake_now) {
-    struct tm *completion_day = localtime((time_t *)&deadline);
+    time_t completed_at = (time_t)deadline;
+    struct tm *completion_day = localtime(&completed_at);
     if (completion_day && (completion_day->tm_year + 1900) * 1000 + completion_day->tm_yday == today) {
-      ++expected[phase - 1];
+      int slot = phase == SESSION_PHASE_SIT ? 0 : phase == SESSION_PHASE_STAND ? 1 : 2;
+      ++expected[slot];
     }
     phase = phase == SESSION_PHASE_SIT ? SESSION_PHASE_STAND :
             phase == SESSION_PHASE_STAND ? SESSION_PHASE_MOVE : SESSION_PHASE_SIT;
@@ -921,6 +939,36 @@ static void test_long_recovery_tallies_only_current_local_day(void) {
   assert(view.record.sit_count == expected[0]);
   assert(view.record.stand_count == expected[1]);
   assert(view.record.move_count == expected[2]);
+}
+
+static void test_overdue_recovery_on_dst_change_day_counts_whole_local_day(void) {
+  fake_reset();
+  setenv("TZ", "Europe/Berlin", 1); /* 2026-10-25: clocks fall back, a 25-hour day */
+  tzset();
+  struct tm local = { .tm_year = 126, .tm_mon = 9, .tm_mday = 25, .tm_hour = 12, .tm_isdst = -1 };
+  fake_now = mktime(&local);
+  local.tm_hour = 0;
+  local.tm_isdst = -1;
+  time_t midnight = mktime(&local);
+  SessionRecord record = {
+    .lifecycle = SESSION_RUNNING,
+    .phase = SESSION_PHASE_SIT,
+    .generation = 4,
+    .deadline_utc = midnight - 5 * 60,
+    .wakeup_id = 55,
+  };
+  prv_save(&record);
+  session_coordinator_init();
+  fake_run_timers();
+  SessionView view = prv_view();
+  assert(view.error == SESSION_ERROR_NONE);
+  /* From 00:00 to 12:00 local on a 25-hour day there are 13 hours: 13 full cycles of 60 minutes. */
+  assert(view.record.sit_count == 13);
+  assert(view.record.stand_count == 13);
+  assert(view.record.move_count == 13);
+  session_coordinator_deinit();
+  setenv("TZ", "UTC", 1);
+  tzset();
 }
 
 static void test_early_callback_reschedules_same_deadline(void) {
@@ -994,7 +1042,19 @@ static void test_menu_row_contract(void) {
   fake_run_timers();
   view = prv_view();
   assert(view.record.lifecycle == SESSION_RUNNING);
+
+  /* Skip (row 1) stays inert while running until Story 1.6. */
   int writes = s_write_attempts;
+  int schedules = fake_schedule_count;
+  session_coordinator_select_menu_row(1);
+  fake_run_timers();
+  SessionView inert = prv_view();
+  assert(memcmp(&inert.record, &view.record, sizeof(view.record)) == 0);
+  assert(inert.error == view.error);
+  assert(s_write_attempts == writes);
+  assert(fake_schedule_count == schedules);
+  assert(fake_cancel_count == cancels);
+
   session_coordinator_select_menu_row(0);
   fake_run_timers();
   SessionView after = prv_view();
@@ -1008,6 +1068,14 @@ static void test_menu_row_contract(void) {
   assert(fake_cancel_count == cancels + 1);
   assert(s_write_attempts == writes + 1);
   assert(fake_haptic_count == 0);
+
+  /* ... and while paused. */
+  writes = s_write_attempts;
+  session_coordinator_select_menu_row(1);
+  fake_run_timers();
+  inert = prv_view();
+  assert(memcmp(&inert.record, &after.record, sizeof(after.record)) == 0);
+  assert(s_write_attempts == writes);
 
   session_coordinator_select_menu_row(0);
   fake_run_timers();
@@ -1140,6 +1208,51 @@ static void test_pause_resume_failures_retain_committed_state(void) {
   assert(stored.remaining_seconds == paused.record.remaining_seconds);
 }
 
+static void test_pause_resume_reject_invalid_or_overflowing_clock(void) {
+  /* Pause: the running session keeps its committed record and shows a clock error. */
+  fake_reset();
+  prv_start_session();
+  SessionView running = prv_view();
+  fake_run_timers();
+  int writes = s_write_attempts;
+  int schedules = fake_schedule_count;
+  fake_now = 0;
+  session_coordinator_pause();
+  fake_run_timers();
+  SessionView view = prv_view();
+  assert(view.error == SESSION_ERROR_CLOCK);
+  assert(view.record.lifecycle == SESSION_RUNNING);
+  assert(view.record.phase == running.record.phase);
+  assert(view.record.deadline_utc == running.record.deadline_utc);
+  assert(s_write_attempts == writes);
+  assert(fake_schedule_count == schedules);
+
+  /* Resume of a PAUSED record is not covered by the generic pre-command clock check, so
+   * prv_resume's own guards are what keep a bogus deadline from being committed. */
+  const time_t bad_clocks[] = { 0, (time_t)INT32_MAX - 10 };
+  for (size_t i = 0; i < sizeof(bad_clocks) / sizeof(bad_clocks[0]); ++i) {
+    fake_reset();
+    prv_start_session();
+    session_coordinator_pause();
+    fake_run_timers();
+    SessionView paused = prv_view();
+    assert(paused.record.lifecycle == SESSION_PAUSED);
+    writes = s_write_attempts;
+    schedules = fake_schedule_count;
+    fake_now = bad_clocks[i];
+    session_coordinator_resume();
+    fake_run_timers();
+    view = prv_view();
+    assert(view.error == SESSION_ERROR_CLOCK);
+    assert(view.record.lifecycle == SESSION_PAUSED);
+    assert(view.record.remaining_seconds == paused.record.remaining_seconds);
+    assert(view.record.deadline_utc == 0);
+    assert(view.record.generation == paused.record.generation);
+    assert(s_write_attempts == writes);
+    assert(fake_schedule_count == schedules);
+  }
+}
+
 static void test_pause_does_not_commit_when_due_reconciliation_fails(void) {
   fake_reset();
   prv_start_session();
@@ -1223,10 +1336,11 @@ static void test_control_enqueue_failure_is_reported(void) {
   assert(prv_view().error == SESSION_ERROR_QUEUE);
 }
 
-static void test_clock_check_does_not_retry_failed_due_transition(void) {
+static void test_clock_check_retries_failed_due_transition(void) {
   fake_reset();
   prv_start_session();
   SessionView view = prv_view();
+  SessionRecord committed = view.record;
   fake_now = (time_t)view.record.deadline_utc;
   fake_fail_schedule = true;
   int schedules = fake_schedule_count;
@@ -1236,12 +1350,372 @@ static void test_clock_check_does_not_retry_failed_due_transition(void) {
   assert(view.error == SESSION_ERROR_WAKEUP);
   assert(view.record.lifecycle == SESSION_RUNNING);
   assert(view.record.phase == SESSION_PHASE_SIT);
-  assert(view.record.wakeup_id >= 0);
-  assert(fake_schedule_count == schedules + 1);
-  (void)prv_view();
-  fake_run_timers();
+  assert(view.record.wakeup_id == (WakeupId)-1);
   assert(fake_schedule_count == schedules + 1);
   assert(fake_haptic_count == 0);
+
+  /* Still failing: each clock check retries and keeps the loss visible. */
+  (void)prv_view();
+  fake_run_timers();
+  view = prv_view();
+  assert(view.error == SESSION_ERROR_WAKEUP);
+  assert(view.record.wakeup_id == (WakeupId)-1);
+  assert(fake_schedule_count == schedules + 2);
+
+  fake_fail_schedule = false;
+  (void)prv_view();
+  fake_run_timers();
+  view = prv_view();
+  assert(view.error == SESSION_ERROR_NONE);
+  assert(view.record.phase == SESSION_PHASE_STAND);
+  assert(view.record.sit_count == 1);
+  assert(view.record.generation > committed.generation);
+  assert(view.record.wakeup_id == fake_last_scheduled_id);
+  assert(fake_haptic_count == 1);
+}
+
+static void test_menu_stop_and_start_reconcile_due_deadline_first(void) {
+  fake_reset();
+  prv_start_session();
+  SessionView view = prv_view();
+  fake_run_timers(); /* drain the clock check so the command itself must reconcile */
+  fake_now = (time_t)view.record.deadline_utc;
+  int schedules = fake_schedule_count;
+  session_coordinator_select_menu_row(2);
+  fake_run_timers();
+  view = prv_view();
+  assert(view.record.lifecycle == SESSION_INACTIVE);
+  assert(view.record.sit_count == 1);
+  assert(fake_haptic_count == 1);
+  assert(fake_schedule_count == schedules + 1);
+  assert(fake_last_cancelled_id == fake_last_scheduled_id);
+
+  fake_reset();
+  prv_start_session();
+  view = prv_view();
+  fake_run_timers();
+  fake_now = (time_t)view.record.deadline_utc;
+  schedules = fake_schedule_count;
+  session_coordinator_start();
+  fake_run_timers();
+  view = prv_view();
+  assert(view.record.lifecycle == SESSION_RUNNING);
+  assert(view.record.phase == SESSION_PHASE_STAND);
+  assert(view.record.sit_count == 1);
+  assert(fake_schedule_count == schedules + 1);
+  assert(fake_haptic_count == 1);
+}
+
+static void test_wakeup_launch_event_is_queued_behind_recovery_and_stale(void) {
+  fake_reset();
+  SessionRecord record = {
+    .lifecycle = SESSION_RUNNING,
+    .phase = SESSION_PHASE_SIT,
+    .generation = 4,
+    .deadline_utc = fake_now + 45 * 60,
+    .wakeup_id = 55,
+  };
+  prv_save(&record);
+  s_launch_reason = APP_LAUNCH_WAKEUP;
+  s_launch_event_available = true;
+  s_launch_wakeup_id = record.wakeup_id;
+  s_launch_cookie = (int32_t)record.generation;
+  session_coordinator_init();
+  fake_run_timers();
+  SessionView view = prv_view();
+  /* Recovery cleared the stored Wakeup and issued a new id, so the launch event is stale. */
+  assert(fake_cancel_all_count == 1);
+  assert(fake_schedule_count == 1);
+  assert(view.error == SESSION_ERROR_NONE);
+  assert(view.record.phase == SESSION_PHASE_SIT);
+  assert(view.record.wakeup_id == fake_last_scheduled_id);
+  assert(view.record.wakeup_id != record.wakeup_id);
+  assert(fake_haptic_count == 0);
+  session_coordinator_deinit();
+}
+
+static void test_recovery_failure_exits_report_error_and_retry(void) {
+  SessionRecord record = {
+    .lifecycle = SESSION_RUNNING,
+    .phase = SESSION_PHASE_SIT,
+    .generation = 7,
+    .wakeup_id = 88,
+  };
+
+  /* Invalid clock at launch. */
+  fake_reset();
+  record.deadline_utc = fake_now + 45 * 60;
+  prv_save(&record);
+  fake_now = 0;
+  session_coordinator_init();
+  fake_run_timers();
+  SessionView view = prv_view();
+  assert(view.error == SESSION_ERROR_CLOCK);
+  assert(view.record.lifecycle == SESSION_RUNNING);
+  assert(view.record.wakeup_id == (WakeupId)-1);
+  assert(fake_schedule_count == 0);
+  fake_now = 1800000000;
+  (void)prv_view();
+  fake_run_timers();
+  view = prv_view();
+  assert(view.error == SESSION_ERROR_NONE);
+  assert(view.record.wakeup_id == fake_last_scheduled_id);
+  session_coordinator_deinit();
+
+  /* Overdue recovery: Wakeup scheduling fails, then succeeds on retry. */
+  fake_reset();
+  record.deadline_utc = fake_now - 30 * 60;
+  prv_save(&record);
+  fake_fail_schedule = true;
+  session_coordinator_init();
+  fake_run_timers();
+  view = prv_view();
+  assert(view.error == SESSION_ERROR_WAKEUP);
+  assert(view.record.lifecycle == SESSION_RUNNING);
+  assert(view.record.wakeup_id == (WakeupId)-1);
+  fake_fail_schedule = false;
+  (void)prv_view();
+  fake_run_timers();
+  view = prv_view();
+  assert(view.error == SESSION_ERROR_NONE);
+  assert(view.record.wakeup_id == fake_last_scheduled_id);
+  assert(view.record.deadline_utc > fake_now);
+  session_coordinator_deinit();
+
+  /* Overdue recovery: persistence fails, then succeeds on retry. */
+  fake_reset();
+  record.deadline_utc = fake_now - 30 * 60;
+  prv_save(&record);
+  fake_fail_write = true;
+  session_coordinator_init();
+  fake_run_timers();
+  view = prv_view();
+  assert(view.error == SESSION_ERROR_STORAGE);
+  assert(view.record.wakeup_id == (WakeupId)-1);
+  assert(fake_last_cancelled_id == fake_last_scheduled_id);
+  fake_fail_write = false;
+  (void)prv_view();
+  fake_run_timers();
+  view = prv_view();
+  assert(view.error == SESSION_ERROR_NONE);
+  assert(view.record.wakeup_id == fake_last_scheduled_id);
+  session_coordinator_deinit();
+}
+
+static void test_stop_works_with_invalid_clock(void) {
+  for (int timed = 0; timed < 2; ++timed) {
+    fake_reset();
+    prv_start_session();
+    if (timed) {
+      session_coordinator_timed_pause(5 * 60);
+      fake_run_timers();
+      assert(prv_view().record.lifecycle == SESSION_TIMED_PAUSED);
+    }
+    WakeupId committed_id = prv_view().record.wakeup_id;
+    int32_t committed_generation = (int32_t)prv_view().record.generation;
+    int cancels = fake_cancel_count;
+    fake_now = 0;
+    session_coordinator_stop();
+    fake_run_timers();
+    SessionView view = prv_view();
+    assert(view.record.lifecycle == SESSION_INACTIVE);
+    assert(view.record.phase == SESSION_PHASE_NONE);
+    assert(view.record.deadline_utc == 0 && view.record.remaining_seconds == 0);
+    assert(view.record.pause_deadline_utc == 0 && view.record.pause_duration_seconds == 0);
+    assert(view.record.wakeup_id == (WakeupId)-1);
+    assert(fake_cancel_count == cancels + 1);
+    assert(fake_last_cancelled_id == committed_id);
+    SessionRecord stored;
+    bool found;
+    assert(session_store_load(&stored, &found) && found);
+    assert(stored.lifecycle == SESSION_INACTIVE);
+    fake_deliver_wakeup(committed_id, committed_generation);
+    assert(prv_view().record.lifecycle == SESSION_INACTIVE);
+  }
+
+  /* Menu row 2 takes the same path. */
+  fake_reset();
+  prv_start_session();
+  fake_now = 0;
+  session_coordinator_select_menu_row(2);
+  fake_run_timers();
+  assert(prv_view().record.lifecycle == SESSION_INACTIVE);
+}
+
+static void test_stop_from_timed_pause_cancels_pause_wakeup(void) {
+  fake_reset();
+  prv_start_session();
+  session_coordinator_timed_pause(10 * 60);
+  fake_run_timers();
+  SessionView paused = prv_view();
+  assert(paused.record.lifecycle == SESSION_TIMED_PAUSED);
+  int cancels = fake_cancel_count;
+  session_coordinator_select_menu_row(2);
+  fake_run_timers();
+  SessionView view = prv_view();
+  assert(view.record.lifecycle == SESSION_INACTIVE);
+  assert(view.record.remaining_seconds == 0);
+  assert(view.record.pause_deadline_utc == 0 && view.record.pause_duration_seconds == 0);
+  assert(view.record.wakeup_id == (WakeupId)-1);
+  assert(fake_cancel_count == cancels + 1);
+  assert(fake_last_cancelled_id == paused.record.wakeup_id);
+  SessionRecord stored;
+  bool found;
+  assert(session_store_load(&stored, &found) && found);
+  assert(stored.lifecycle == SESSION_INACTIVE);
+  assert(stored.pause_deadline_utc == 0 && stored.remaining_seconds == 0);
+
+  int schedules = fake_schedule_count;
+  fake_now = (time_t)paused.record.pause_deadline_utc;
+  fake_deliver_wakeup(paused.record.wakeup_id, (int32_t)paused.record.generation);
+  assert(prv_view().record.lifecycle == SESSION_INACTIVE);
+  assert(fake_schedule_count == schedules);
+  assert(fake_haptic_count == 0);
+
+  /* EVENT_STOP takes the same lifecycle path. */
+  fake_reset();
+  prv_start_session();
+  session_coordinator_timed_pause(5 * 60);
+  fake_run_timers();
+  session_coordinator_stop();
+  fake_run_timers();
+  assert(prv_view().record.lifecycle == SESSION_INACTIVE);
+}
+
+static void test_menu_resume_row_ends_timed_pause_early(void) {
+  fake_reset();
+  prv_start_session();
+  fake_now += 100;
+  session_coordinator_timed_pause(30 * 60);
+  fake_run_timers();
+  SessionView paused = prv_view();
+  assert(paused.record.lifecycle == SESSION_TIMED_PAUSED);
+  fake_now += 60;
+  int cancels = fake_cancel_count;
+  session_coordinator_select_menu_row(0);
+  fake_run_timers();
+  SessionView view = prv_view();
+  assert(view.error == SESSION_ERROR_NONE);
+  assert(view.record.lifecycle == SESSION_RUNNING);
+  assert(view.record.phase == paused.record.phase);
+  assert(view.record.deadline_utc == fake_now + paused.record.remaining_seconds);
+  assert(view.record.remaining_seconds == 0);
+  assert(view.record.pause_deadline_utc == 0 && view.record.pause_duration_seconds == 0);
+  assert(view.record.wakeup_id == fake_last_scheduled_id);
+  assert(view.record.generation == paused.record.generation + 1);
+  assert(fake_cancel_count == cancels + 1);
+  assert(fake_last_cancelled_id == paused.record.wakeup_id);
+  assert(fake_haptic_count == 0);
+}
+
+typedef enum {
+  DAY_TIMED_ENTRY, DAY_EARLY_RESUME, DAY_PAUSE_END_CALLBACK, DAY_PAUSE_END_RECOVERY,
+  DAY_MANUAL_PAUSE, DAY_MANUAL_RESUME, DAY_CASES
+} DayCase;
+
+/* Starts 100 s before local midnight with a non-zero tally, runs the case's setup, crosses
+ * midnight without a render tick (a tick would enqueue the async rollover and hide a missing
+ * reset), applies the transition and expects the tally to belong to the new local day. */
+static void test_pause_transitions_reset_tally_day_across_midnight(void) {
+  for (int c = 0; c < DAY_CASES; ++c) {
+    fake_reset();
+    struct tm local = *localtime(&fake_now);
+    local.tm_hour = 0;
+    local.tm_min = 0;
+    local.tm_sec = 0;
+    time_t midnight = mktime(&local) + 24 * 3600;
+    fake_now = midnight - 100;
+    session_coordinator_init();
+    fake_run_timers();
+    session_coordinator_start();
+    fake_run_timers();
+    SessionView view = prv_view();
+    fake_run_timers(); /* day rollover for the first day */
+    SessionRecord seeded = prv_view().record;
+    int32_t first_day = seeded.tally_day;
+    assert(first_day != 0);
+    seeded.sit_count = 3;
+    seeded.stand_count = 2;
+    seeded.move_count = 1;
+    prv_save(&seeded);
+    session_coordinator_recover();
+    fake_run_timers();
+    (void)view;
+
+    if (c == DAY_EARLY_RESUME || c == DAY_PAUSE_END_CALLBACK || c == DAY_PAUSE_END_RECOVERY) {
+      session_coordinator_timed_pause(c == DAY_EARLY_RESUME ? 30 * 60 : 5 * 60);
+      fake_run_timers();
+    } else if (c == DAY_MANUAL_RESUME) {
+      session_coordinator_pause();
+      fake_run_timers();
+    }
+    SessionRecord before = prv_view().record;
+    fake_run_timers();
+    assert(before.tally_day == first_day && before.sit_count == 3);
+
+    fake_now = midnight + 100; /* crosses local midnight; no render tick follows */
+    switch (c) {
+      case DAY_TIMED_ENTRY:
+        session_coordinator_timed_pause(5 * 60);
+        fake_run_timers();
+        break;
+      case DAY_EARLY_RESUME:
+        session_coordinator_middle_control();
+        fake_run_timers();
+        break;
+      case DAY_PAUSE_END_CALLBACK:
+        fake_now = (time_t)before.pause_deadline_utc;
+        if (fake_now < midnight + 100) {
+          fake_now = midnight + 100;
+        }
+        fake_deliver_wakeup(before.wakeup_id, (int32_t)before.generation);
+        break;
+      case DAY_PAUSE_END_RECOVERY:
+        fake_now = (time_t)before.pause_deadline_utc;
+        if (fake_now < midnight + 100) {
+          fake_now = midnight + 100;
+        }
+        session_coordinator_deinit();
+        session_coordinator_init();
+        fake_run_timers();
+        break;
+      case DAY_MANUAL_PAUSE:
+        session_coordinator_pause();
+        fake_run_timers();
+        break;
+      default:
+        session_coordinator_resume();
+        fake_run_timers();
+        break;
+    }
+    SessionRecord stored;
+    bool found;
+    assert(session_store_load(&stored, &found) && found);
+    assert(stored.tally_day != first_day);
+    assert(stored.sit_count == 0 && stored.stand_count == 0 && stored.move_count == 0);
+    session_coordinator_deinit();
+  }
+}
+
+static void test_overdue_pause_end_recovery_does_not_cancel_invalid_id(void) {
+  fake_reset();
+  prv_start_session();
+  session_coordinator_timed_pause(5 * 60);
+  fake_run_timers();
+  SessionRecord paused = prv_view().record;
+  session_coordinator_deinit();
+  fake_now = (time_t)paused.pause_deadline_utc + 60;
+  fake_last_cancelled_id = (WakeupId)-2;
+  int cancels = fake_cancel_count;
+  session_coordinator_init();
+  fake_run_timers();
+  SessionView view = prv_view();
+  assert(view.record.lifecycle == SESSION_RUNNING);
+  assert(fake_cancel_all_count == 2); /* start-up of the test session, then this recovery */
+  /* cancel_all already removed the stored Wakeup, so no per-id cancel (and never id -1) follows. */
+  assert(fake_cancel_count == cancels);
+  assert(fake_last_cancelled_id == (WakeupId)-2);
+  session_coordinator_deinit();
 }
 
 static void test_stop_paused_session_clears_saved_remainder(void) {
@@ -1839,6 +2313,52 @@ static void test_store_rejects_invalid_records(void) {
   mutated[19] = 0xff; mutated[20] = 0xff; mutated[21] = 0xff; mutated[22] = 0xff;
   prv_expect_load_rejected(mutated, sizeof(mutated));
   prv_expect_load_rejected(bytes, sizeof(bytes) - 1);
+
+  /* Plain PAUSED record: the encoding is otherwise valid, so only the remainder decides. */
+  fake_reset();
+  SessionRecord paused = {
+    .lifecycle = SESSION_PAUSED,
+    .phase = SESSION_PHASE_SIT,
+    .generation = 2,
+    .remaining_seconds = 5,
+    .wakeup_id = (WakeupId)-1,
+  };
+  prv_save(&paused);
+  uint8_t paused_bytes[45];
+  size_t paused_size = (size_t)s_persisted_size;
+  assert(paused_size <= sizeof(paused_bytes));
+  memcpy(paused_bytes, s_persisted, paused_size);
+  SessionRecord loaded;
+  bool found;
+  assert(session_store_load(&loaded, &found) && found && loaded.remaining_seconds == 5);
+  paused_bytes[11] = 0xff; paused_bytes[12] = 0xff; paused_bytes[13] = 0xff;
+  paused_bytes[14] = 0x7f; /* INT32_MAX: still accepted */
+  memcpy(s_persisted, paused_bytes, paused_size);
+  assert(session_store_load(&loaded, &found) && found && loaded.remaining_seconds == INT32_MAX);
+  paused_bytes[14] = 0x80; /* INT32_MAX + 1: rejected */
+  prv_expect_load_rejected(paused_bytes, paused_size);
+
+  /* 33-byte legacy size: only the version byte decides, so unknown versions must be rejected. */
+  fake_reset();
+  SessionRecord legacy_record = {
+    .lifecycle = SESSION_RUNNING,
+    .phase = SESSION_PHASE_SIT,
+    .generation = 2,
+    .deadline_utc = fake_now + 45 * 60,
+    .wakeup_id = 7,
+  };
+  prv_save(&legacy_record);
+  uint8_t legacy_bytes[33];
+  memcpy(legacy_bytes, s_persisted, sizeof(legacy_bytes));
+  legacy_bytes[0] = 1;
+  fake_reset();
+  assert(persist_write_data(STORE_KEY, legacy_bytes, sizeof(legacy_bytes)) == (int)sizeof(legacy_bytes));
+  assert(session_store_load(&loaded, &found) && found && loaded.wakeup_id == 7);
+  const uint8_t unknown_versions[] = { 0, 2, 9 };
+  for (size_t i = 0; i < sizeof(unknown_versions); ++i) {
+    legacy_bytes[0] = unknown_versions[i];
+    prv_expect_load_rejected(legacy_bytes, sizeof(legacy_bytes));
+  }
 }
 
 static void test_invalid_record_is_persisted_as_error_until_replaced(void) {
@@ -1894,12 +2414,22 @@ int main(void) {
   test_pause_resume_freezes_persists_and_rejects_stale_callback();
   test_pause_due_boundary_reconciles_first();
   test_pause_resume_failures_retain_committed_state();
+  test_pause_resume_reject_invalid_or_overflowing_clock();
   test_pause_does_not_commit_when_due_reconciliation_fails();
   test_paused_record_recovers_without_wakeup();
   test_middle_control_resumes_only_while_paused();
   test_control_enqueue_failure_is_reported();
-  test_clock_check_does_not_retry_failed_due_transition();
+  test_clock_check_retries_failed_due_transition();
+  test_overdue_recovery_on_dst_change_day_counts_whole_local_day();
+  test_menu_stop_and_start_reconcile_due_deadline_first();
+  test_wakeup_launch_event_is_queued_behind_recovery_and_stale();
+  test_recovery_failure_exits_report_error_and_retry();
   test_stop_paused_session_clears_saved_remainder();
+  test_overdue_pause_end_recovery_does_not_cancel_invalid_id();
+  test_stop_works_with_invalid_clock();
+  test_stop_from_timed_pause_cancels_pause_wakeup();
+  test_menu_resume_row_ends_timed_pause_early();
+  test_pause_transitions_reset_tally_day_across_midnight();
   test_timed_pause_entry_change_resume_and_stale_callback();
   test_timed_pause_due_boundary_and_overdue_recovery();
   test_pause_end_recovery_failures_and_restart_haptic_marker();
