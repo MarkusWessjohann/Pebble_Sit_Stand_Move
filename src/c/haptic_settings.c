@@ -15,10 +15,11 @@ HapticPattern haptic_settings_get(void) {
 }
 
 bool haptic_settings_set(HapticPattern pattern) {
-  uint8_t value = (uint8_t)pattern;
-  if (pattern < HAPTIC_PATTERN_SHORT || pattern >= HAPTIC_PATTERN_COUNT) {
+  /* Compared as unsigned: with -fshort-enums the enum is unsigned and a `< 0` test is rejected. */
+  if ((unsigned)pattern >= (unsigned)HAPTIC_PATTERN_COUNT) {
     return false;
   }
+  uint8_t value = (uint8_t)pattern;
   return persist_write_data(HAPTIC_SETTINGS_KEY, &value, sizeof(value)) == (int)sizeof(value);
 }
 
