@@ -30,14 +30,14 @@
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 
 generated: 10-23-2026 15:35
-last_updated: 11-03-2026
+last_updated: 11-04-2026
 project: sit_stand_go
 project_key: NOKEY
 tracking_system: file-system
 story_location: _bmad-output/implementation-artifacts
 
 development_status:
-  epic-1: in-progress
+  epic-1: done
   1-1-establish-pebble-toolchain-and-emulator-readiness: done
   1-2-start-and-stop-a-session-from-the-watch: done
   1-3-follow-the-cycle-and-recover-from-missed-deadlines: done
@@ -47,10 +47,14 @@ development_status:
   1-7-extend-the-active-phase: done
   1-8-verify-the-finished-app-on-pebble-time-2-before-release: done
   epic-1-retrospective: optional
-  epic-2: in-progress
-  2-1-enlarge-the-time-and-tally-and-place-button-labels-beside-the-buttons: done
+  epic-2: done
+  2-1-enlarge-the-time-and-tally-and-place-button-labels-beside-th: done
   epic-2-retrospective: optional
   epic-3: done
   3-1-choose-a-haptic-pattern-in-settings: done
   3-2-repeat-the-alert-until-select-is-pressed: done
   epic-3-retrospective: optional
+  epic-4: done
+  4-1-set-the-length-of-sit-stand-and-move-in-settings: done
+  4-2-reset-the-phase-lengths-to-45-10-5: done
+  epic-4-retrospective: optional
