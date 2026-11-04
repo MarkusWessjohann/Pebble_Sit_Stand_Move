@@ -45,3 +45,7 @@ set `pebble.watchapp.watchface` to `true` in `package.json`.
 ## Documentation
 
 Full SDK docs, tutorials, and API reference: <https://developer.repebble.com>
+
+## License
+
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
