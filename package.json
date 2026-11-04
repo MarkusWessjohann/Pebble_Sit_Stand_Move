@@ -22,7 +22,7 @@
   ],
   "dependencies": {},
   "pebble": {
-    "displayName": "Sit Stand Walk",
+    "displayName": "Sit Stand Move",
     "uuid": "56fe7357-4f1c-4f59-8a93-f9e348a387f3",
     "sdkVersion": "3",
     "enableMultiJS": true,

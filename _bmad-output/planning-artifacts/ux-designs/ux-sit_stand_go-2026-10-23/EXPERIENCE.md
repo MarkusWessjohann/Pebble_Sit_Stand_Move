@@ -1,15 +1,15 @@
 ---
-title: Sit Stand Go — Watch Experience
+title: Sit Stand Move — Watch Experience
 status: final
 created: 2026-10-23
-updated: 2026-11-03
+updated: 2026-11-04
 sources:
   - ../../briefs/brief-sit_stand_go-2026-10-21/brief.md
   - ../../prds/prd-sit_stand_go-2026-10-21/prd.md
   - ../../architecture/architecture-sit_stand_go-2026-10-21/ARCHITECTURE-SPINE.md
 ---
 
-# Sit Stand Go — Experience Spine
+# Sit Stand Move — Experience Spine
 
 ## Foundation
 
@@ -29,11 +29,11 @@ Verify finished-app controls, legibility, and firmware-dependent behavior on Peb
 
 ## Voice and Tone
 
-Use concise, neutral, functional labels. Names and control labels stay literal; the phase is always `Move`, never `Walk`.
+Use concise, neutral, functional labels. Names and control labels stay literal; the phase is always `Move`.
 
 | Use | Avoid |
 |---|---|
-| `Sit`, `Stand`, `Move` | Renaming `Move` to `Walk` |
+| `Sit`, `Stand`, `Move` | A different phase name than the name in the watch UI |
 | `+5`, `Pause`, `Resume`, `+10` | Unspecified promotional or motivational copy |
 | Clear clock, persistence, or wakeup failure text | Silently implying that a failed session change is active or scheduled |
 

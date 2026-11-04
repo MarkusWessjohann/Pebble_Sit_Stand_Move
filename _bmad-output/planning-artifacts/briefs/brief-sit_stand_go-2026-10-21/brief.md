@@ -1,15 +1,15 @@
 ---
-title: Sit Stand Go — Pebble Reminder App
+title: Sit Stand Move — Pebble Reminder App
 status: draft
 created: 2026-10-21
 updated: 2026-11-04
 ---
 
-# Product Brief: Sit Stand Go
+# Product Brief: Sit Stand Move
 
 ## Executive Summary
 
-Sit Stand Go is a simple, watch-first Pebble Time 2 app for people who want a nudge to break up long periods of sitting. During a manually started session, it runs a repeating rhythm: by default, sit for 45 minutes, stand for 10 minutes, then move for 5 minutes. The owner can change each phase length from 5 to 60 minutes in 5-minute steps and reset the lengths to their defaults in Settings. At each on-time phase transition, the watch vibrates and opens the app to show the active phase and remaining time; Pebble Time 2 foreground behavior remains to be verified on-device.
+Sit Stand Move is a simple, watch-first Pebble Time 2 app for people who want a nudge to break up long periods of sitting. During a manually started session, it runs a repeating rhythm: by default, Sit for 45 minutes, Stand for 10 minutes, then Move for 5 minutes. The owner can change each phase length from 5 to 60 minutes in 5-minute steps and reset the lengths to their defaults in Settings. At each on-time phase transition, the watch vibrates and opens the app to show the active phase and remaining time; Pebble Time 2 foreground behavior remains to be verified on-device.
 
 The app is intended to continue timing after the user leaves it, without phone interaction during a session. Users can manually pause/resume, pause the active phase for 5, 10, or 30 minutes, skip a phase, or extend it by 5 or 10 minutes. During timed pause the phase clock is frozen; at pause end the same phase resumes with saved remaining duration, the app opens, and the watch vibrates once. If a deadline is missed during downtime, elapsed phases are processed in order; the resulting phase restarts with its full default duration and produces one haptic. Pin and verify a reproducible toolchain/build workflow before implementation; verify physical Wakeup and foreground behavior with the finished app before release in Story 1.8.
 
@@ -19,7 +19,7 @@ When focused on work or other activities, a person may sit for long stretches an
 
 ## The Solution
 
-Provide a Pebble Time 2 app that starts a repeating sit–stand–move session on demand. Each cycle defaults to 45 minutes sitting, 10 minutes standing, and 5 minutes moving; the owner can configure each phase length in Settings and reset all three to their defaults. At a phase deadline, the watch emits a haptic and opens the app to show the current phase and remaining time. The user can pause, resume, stop, skip to the next phase, or extend the current phase by 5 or 10 minutes.
+Provide a Pebble Time 2 app that starts a repeating Sit–Stand–Move session on demand. Each cycle defaults to 45 minutes in Sit, 10 minutes in Stand, and 5 minutes in Move; the owner can configure each phase length in Settings and reset all three to their defaults. At a phase deadline, the watch emits a haptic and opens the app to show the current phase and remaining time. The user can pause, resume, stop, skip to the next phase, or extend the current phase by 5 or 10 minutes.
 
 The intended experience is watch-first and does not depend on a phone during a session. Pebble Time 2 firmware must be tested for Wakeup haptics and app foregrounding with the finished app before release in Story 1.8.
 
@@ -52,7 +52,7 @@ These criteria describe intended outcomes; exact platform capabilities and test 
 
 ## Vision
 
-If the personal version proves useful, Sit Stand Go can remain a lightweight watch utility that makes regular posture changes easier to remember and accommodates real-world interruptions without turning movement into another tracking project.
+If the personal version proves useful, Sit Stand Move can remain a lightweight watch utility that makes regular posture changes easier to remember and accommodates real-world interruptions without turning movement into another tracking project.
 
 ## Open Questions and Assumptions
 

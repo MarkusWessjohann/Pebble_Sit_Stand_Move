@@ -59,8 +59,12 @@
   evidence: `sit_stand_move.c` is not compiled by the host harness. Swapping `shorter` and `longer`, or changing `II`, leaves every test passing. The same gap is already recorded for Stories 1.6 and 1.7.
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-2-rename-app-to-sit-stand-walk.md`
-  summary: Check that "Sit Stand Walk" fits the Pebble launcher on small-screen platforms.
-  evidence: Unverified (maybe-false, would be low-to-medium); needs an emulator or device look at the app list.
+  summary: Check that the Pebble launcher name fits on small-screen platforms.
+  evidence: Unverified (maybe-false, would be low-to-medium); needs an emulator or device look at the app list. The active name is now `Sit Stand Move`.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-rename-app-to-sit-stand-move.md`
+  summary: Rebuild with the pinned Pebble CLI and confirm generated app metadata and launcher display `Sit Stand Move` on Pebble Time 2.
+  evidence: The pinned CLI could not start in this environment because uv could not download `certifi==2026.10.23`; generated `build/appinfo.json` still contains `Sit Stand Walk` in `displayName`, `shortName`, and `longName`.
 
 ## Deferred from: code review of spec-3-1-choose-a-haptic-pattern-in-settings (2026-11-03)
 

@@ -1,19 +1,19 @@
 ---
-title: Sit Stand Go — Pebble Reminder App
+title: Sit Stand Move — Pebble Reminder App
 status: final
 created: 2026-10-21
-updated: 2026-11-03
+updated: 2026-11-04
 ---
 
-# PRD: Sit Stand Go
+# PRD: Sit Stand Move
 
 ## 0. Document Purpose
 
-This PRD defines the first version of Sit Stand Go, a personal Pebble Time 2 watch app. It guides UX, architecture, and implementation planning, building on `_bmad-output/planning-artifacts/briefs/brief-sit_stand_go-2026-10-21/brief.md`. **Build readiness:** before implementation, pin the exact toolchain and demonstrate reproducible build/install readiness with the available workflow and emulator. Verify the finished app's physical Pebble Time 2 behavior as the pre-release gate in Story 1.8, after Stories 1.2–1.7.
+This PRD defines the first version of Sit Stand Move, a personal Pebble Time 2 watch app. It guides UX, architecture, and implementation planning, building on `_bmad-output/planning-artifacts/briefs/brief-sit_stand_go-2026-10-21/brief.md`. **Build readiness:** before implementation, pin the exact toolchain and demonstrate reproducible build/install readiness with the available workflow and emulator. Verify the finished app's physical Pebble Time 2 behavior as the pre-release gate in Story 1.8, after Stories 1.2–1.7.
 
 ## 1. Vision
 
-Sit Stand Go helps its owner interrupt long periods of sitting with a repeating 45-minute Sit, 10-minute Stand, and 5-minute Move schedule. The owner can start a session at any wall-clock time, such as 09:10. The first 45-minute Sit phase begins immediately; subsequent phases are relative to actual deadlines, not aligned to full-hour boundaries. The owner can pause, skip, or extend an active phase by 5 or 10 minutes. The three phase lengths are defaults; the owner can change each one in Settings (FR-12).
+Sit Stand Move helps its owner interrupt long periods of sitting with a repeating 45-minute Sit, 10-minute Stand, and 5-minute Move schedule. The owner can start a session at any wall-clock time, such as 09:10. The first 45-minute Sit phase begins immediately; subsequent phases are relative to actual deadlines, not aligned to full-hour boundaries. The owner can pause, skip, or extend an active phase by 5 or 10 minutes. The three phase lengths are defaults; the owner can change each one in Settings (FR-12).
 
 The product succeeds when phase deadlines reliably produce a haptic signal and open the app to show phase and remaining time, with no phone interaction during a session. After any overdue deadline, the app processes elapsed phases in order, restarts the resulting phase at full default duration, and emits only one haptic. The watch firmware must be verified before this behavior is treated as deliverable.
 
@@ -37,7 +37,7 @@ The product succeeds when phase deadlines reliably produce a haptic signal and o
 - **Cycle** — The ordered sequence of Sit, Stand, and Move phases; the default Cycle lasts 60 minutes, and the configured Cycle lasts the sum of the three configured Phase lengths.
 - **Sit** — The seated phase, 45 minutes by default.
 - **Stand** — The standing phase, 10 minutes by default.
-- **Move** — The walking or other movement phase, 5 minutes by default.
+- **Move** — The movement phase, 5 minutes by default.
 - **Configured length** — The length the owner set for a Phase in Settings (5 to 60 minutes in steps of 5); it equals the default until the owner changes it.
 - **Timed Pause** — A user-selected 5-, 10-, or 30-minute suspension of the active Phase; at its end the same Phase resumes with its saved remaining duration.
 

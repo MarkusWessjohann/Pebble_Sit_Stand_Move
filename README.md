@@ -1,4 +1,4 @@
-# Sit Stand Walk
+# Sit Stand Move
 
 A Pebble watchapp/watchface written in C using the Pebble SDK.
 

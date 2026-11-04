@@ -1,6 +1,6 @@
 ---
 status: final
-updated: 2026-11-03
+updated: 2026-11-04
 epic3Pass: step-04-final-validation  # Epic 3 (settings): validated and complete
 epic4Pass: step-04-final-validation  # Epic 4 (phase lengths): validated and complete
 stepsCompleted:
@@ -52,7 +52,7 @@ FR11: With **Until Select**, the haptic repeats until the owner presses Select, 
 
 **Epic 4 additions (2026-11-03, owner-requested configurable phase lengths):**
 
-FR12: Settings lets the owner set the length of each phase: **Sit**, **Stand**, and **Move**. Each length is chosen from 5 to 60 minutes in steps of 5 minutes. The defaults stay 45 (Sit), 10 (Stand), and 5 (Move), so an owner who never opens the setting sees today's behavior. The phase keeps the name `Move` (owner decision: not renamed to `Walk`). Where FR1, FR2, FR6, and FR8 state 45/10/5 minutes, those are the default lengths; with changed lengths the same rules apply to the configured values.
+FR12: Settings lets the owner set the length of each phase: **Sit**, **Stand**, and **Move**. Each length is chosen from 5 to 60 minutes in steps of 5 minutes. The defaults stay 45 (Sit), 10 (Stand), and 5 (Move), so an owner who never opens the setting sees today's behavior. Where FR1, FR2, FR6, and FR8 state 45/10/5 minutes, those are the default lengths; with changed lengths the same rules apply to the configured values.
 
 FR13: The three lengths persist across app restarts and independently of the session record, so Stop, Start, and session-record recovery never reset them. A missing, corrupt, or out-of-range stored value falls back to that phase's default without a visible error.
 
@@ -121,7 +121,7 @@ UX-DR2: Use native Pebble visual styles, system palette/contrast conventions, ge
 
 UX-DR3: Arrange the session view in this order: small current wall-clock time at the top; primary large remaining phase time; phase icon directly below the countdown; readable Sit/Stand/Move label paired with its icon; small bottom-line daily Sit/Stand/Move tally.
 
-UX-DR4: Give the active phase countdown the strongest visual emphasis. Keep current time and daily tally secondary, and use `Move` consistently (never `Walk`) as the phase name.
+UX-DR4: Give the active phase countdown the strongest visual emphasis. Keep current time and daily tally secondary, and use `Move` consistently as the phase name.
 
 UX-DR5: Pair a monochrome chair icon with readable Sit text, a standing-person icon with readable Stand text, and a moving-person icon with readable Move text. Text is authoritative; icons are supplementary and color must not be the sole phase or state identifier. Verify suitable native assets and legibility on target hardware.
 

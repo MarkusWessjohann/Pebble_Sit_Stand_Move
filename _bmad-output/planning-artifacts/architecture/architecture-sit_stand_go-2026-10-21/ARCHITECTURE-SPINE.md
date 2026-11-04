@@ -1,5 +1,5 @@
 ---
-name: Sit Stand Go — Pebble Time 2
+name: Sit Stand Move — Pebble Time 2
 type: architecture-spine
 purpose: build-substrate
 altitude: feature
@@ -7,14 +7,14 @@ paradigm: event-driven state machine
 scope: Pebble Time 2 sit/stand/move reminder app
 status: final
 created: 2026-10-21
-updated: 2026-11-03
+updated: 2026-11-04
 binds: [FR-1, FR-2, FR-3, FR-4, FR-5, FR-6, FR-7, FR-9, FR-10, FR-11, FR-12, FR-13, FR-14, FR-15, UJ-1, UJ-2]
 sources:
   - _bmad-output/planning-artifacts/prds/prd-sit_stand_go-2026-10-21/prd.md
 companions: []
 ---
 
-# Architecture Spine — Sit Stand Go — Pebble Time 2
+# Architecture Spine — Sit Stand Move — Pebble Time 2
 
 ## Design Paradigm
 

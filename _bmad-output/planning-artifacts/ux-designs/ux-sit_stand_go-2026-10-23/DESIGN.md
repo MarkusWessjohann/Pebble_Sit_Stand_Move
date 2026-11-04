@@ -1,10 +1,10 @@
 ---
-title: Sit Stand Go — Watch Design
-name: Sit Stand Go
+title: Sit Stand Move — Watch Design
+name: Sit Stand Move
 description: Native Pebble Time 2 interface for a personal sit/stand/move reminder.
 status: final
 created: 2026-10-23
-updated: 2026-11-03
+updated: 2026-11-04
 sources:
   - ../../briefs/brief-sit_stand_go-2026-10-21/brief.md
   - ../../prds/prd-sit_stand_go-2026-10-21/prd.md
@@ -18,11 +18,11 @@ typography:
     note: Pebble native large/readable text style; platform-defined metrics
 ---
 
-# Sit Stand Go — Design Spine
+# Sit Stand Move — Design Spine
 
 ## Brand & Style
 
-Sit Stand Go is a watch-first, single-device reminder utility. Its visual language stays within native Pebble conventions: legible, information-led, and usable with a monochrome/high-contrast display. Semantic tokens inherit values from the Pebble platform; this document does not prescribe palette values, fonts, decorative treatments, or a custom brand layer.
+Sit Stand Move is a watch-first, single-device reminder utility. Its visual language stays within native Pebble conventions: legible, information-led, and usable with a monochrome/high-contrast display. Semantic tokens inherit values from the Pebble platform; this document does not prescribe palette values, fonts, decorative treatments, or a custom brand layer.
 
 The foreground session view gives visual priority to the phase countdown. The current time and today's completed phase counts remain secondary to it, though larger than originally specified (Gothic 24). Use `Move` consistently as the phase name.
 
