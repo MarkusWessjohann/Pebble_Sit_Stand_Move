@@ -23,7 +23,6 @@ void session_coordinator_start(void);
 void session_coordinator_pause(void);
 void session_coordinator_resume(void);
 void session_coordinator_timed_pause(int32_t duration_seconds);
-void session_coordinator_change_timed_pause(bool longer);
 bool session_coordinator_middle_control(void);
 bool session_coordinator_top_control(void);
 bool session_coordinator_bottom_control(void);

@@ -107,11 +107,9 @@ static void prv_render(void) {
              (int)(view.remaining_seconds / 60), (int)(view.remaining_seconds % 60));
     snprintf(s_phase_text, sizeof(s_phase_text), "BREAK");
     text_layer_set_font(s_phase_layer, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD));
-    int shorter = view.record.pause_duration_seconds == 5 * 60 ? 10 : 5;
-    int longer = view.record.pause_duration_seconds == 30 * 60 ? 10 : 30;
-    snprintf(s_label_text[0], sizeof(s_label_text[0]), "%dm", shorter);
+    snprintf(s_label_text[0], sizeof(s_label_text[0]), "+5");
     snprintf(s_label_text[1], sizeof(s_label_text[1]), "BREAK");
-    snprintf(s_label_text[2], sizeof(s_label_text[2]), "%dm", longer);
+    snprintf(s_label_text[2], sizeof(s_label_text[2]), "-5");
   } else if (view.record.lifecycle == SESSION_RUNNING || view.record.lifecycle == SESSION_PAUSED) {
     snprintf(s_countdown_text, sizeof(s_countdown_text), "%02d:%02d",
              (int)(view.remaining_seconds / 60), (int)(view.remaining_seconds % 60));

@@ -29,7 +29,6 @@ typedef enum {
   EVENT_DAY_ROLLOVER,
   EVENT_CLOCK_CHECK,
   EVENT_TIMED_PAUSE,
-  EVENT_CHANGE_TIMED_PAUSE,
   EVENT_MIDDLE_CONTROL,
   EVENT_TOP_CONTROL,
   EVENT_BOTTOM_CONTROL,
@@ -43,7 +42,7 @@ typedef struct {
   uint16_t row;
   int32_t duration_seconds;
   int32_t extend_seconds;
-  bool longer;
+  bool timed_pause_control;
   bool early_resume;
   bool menu_resume;
 } SessionEvent;
@@ -362,19 +361,9 @@ static void prv_timed_pause(int32_t duration_seconds) {
   s_error = SESSION_ERROR_NONE;
 }
 
-static int32_t prv_alternative_duration(int32_t current, bool longer) {
-  if (current == SESSION_PAUSE_5_SECONDS) {
-    return longer ? SESSION_PAUSE_30_SECONDS : SESSION_PAUSE_10_SECONDS;
-  }
-  if (current == SESSION_PAUSE_10_SECONDS) {
-    return longer ? SESSION_PAUSE_30_SECONDS : SESSION_PAUSE_5_SECONDS;
-  }
-  return longer ? SESSION_PAUSE_10_SECONDS : SESSION_PAUSE_5_SECONDS;
-}
-
-static void prv_change_timed_pause(bool longer) {
+static void prv_change_timed_pause(int32_t seconds) {
   time_t now;
-  if (s_record.lifecycle != SESSION_TIMED_PAUSED) {
+  if (!seconds || s_record.lifecycle != SESSION_TIMED_PAUSED) {
     return;
   }
   if (!prv_read_utc(&now)) {
@@ -384,15 +373,24 @@ static void prv_change_timed_pause(bool longer) {
   if (!prv_reconcile_before_command(now) || s_record.lifecycle != SESSION_TIMED_PAUSED) {
     return;
   }
-  int32_t duration = prv_alternative_duration(s_record.pause_duration_seconds, longer);
-  if ((uint64_t)now > (uint64_t)INT32_MAX - (uint32_t)duration) {
+  int64_t remaining = s_record.pause_deadline_utc - now;
+  if (seconds < 0 && remaining <= -(int64_t)seconds) {
+    if (remaining <= SESSION_SUBTRACT_FLOOR_SECONDS) {
+      return;
+    }
+  }
+  int64_t new_deadline = s_record.pause_deadline_utc + seconds;
+  if (seconds < 0 && remaining <= -(int64_t)seconds) {
+    new_deadline = (int64_t)now + SESSION_SUBTRACT_FLOOR_SECONDS;
+  }
+  if (new_deadline > INT32_MAX) {
     s_error = SESSION_ERROR_CLOCK;
     return;
   }
   SessionRecord candidate = s_record;
   WakeupId old_id = candidate.wakeup_id;
-  candidate.pause_deadline_utc = (int64_t)now + duration;
-  candidate.pause_duration_seconds = duration;
+  candidate.pause_deadline_utc = new_deadline;
+  candidate.pause_duration_seconds = (int32_t)(new_deadline - now);
   if (!prv_next_generation(candidate.generation, &candidate.generation)) {
     s_error = SESSION_ERROR_STORAGE;
     return;
@@ -885,7 +883,6 @@ static void prv_process(const SessionEvent *event) {
   bool is_command = event->type == EVENT_MENU_SELECT || event->type == EVENT_START ||
                     event->type == EVENT_PAUSE || event->type == EVENT_RESUME ||
                     event->type == EVENT_STOP || event->type == EVENT_TIMED_PAUSE ||
-                    event->type == EVENT_CHANGE_TIMED_PAUSE ||
                     event->type == EVENT_MIDDLE_CONTROL ||
                     event->type == EVENT_TOP_CONTROL || event->type == EVENT_BOTTOM_CONTROL ||
                     event->type == EVENT_SKIP;
@@ -940,10 +937,6 @@ static void prv_process(const SessionEvent *event) {
     prv_timed_pause(event->duration_seconds);
     return;
   }
-  if (event->type == EVENT_CHANGE_TIMED_PAUSE) {
-    prv_change_timed_pause(event->longer);
-    return;
-  }
   if (event->type == EVENT_MIDDLE_CONTROL) {
     if (event->early_resume) {
       if (s_record.lifecycle == SESSION_TIMED_PAUSED) {
@@ -959,10 +952,14 @@ static void prv_process(const SessionEvent *event) {
   }
   if (event->type == EVENT_TOP_CONTROL || event->type == EVENT_BOTTOM_CONTROL) {
     if (event->extend_seconds) {
-      /* Meaning is fixed at press time: an Extend press never becomes a break-length change. */
-      prv_extend(event->extend_seconds);
+      /* Preserve the pressed control's meaning if deadline reconciliation changes lifecycle. */
+      if (event->timed_pause_control) {
+        prv_change_timed_pause(event->extend_seconds);
+      } else {
+        prv_extend(event->extend_seconds);
+      }
     } else {
-      prv_change_timed_pause(event->type == EVENT_BOTTOM_CONTROL);
+      prv_change_timed_pause(event->type == EVENT_TOP_CONTROL ? 300 : -300);
     }
     return;
   }
@@ -1059,10 +1056,6 @@ void session_coordinator_timed_pause(int32_t duration_seconds) {
   prv_enqueue((SessionEvent){ .type = EVENT_TIMED_PAUSE, .duration_seconds = duration_seconds });
 }
 
-void session_coordinator_change_timed_pause(bool longer) {
-  prv_enqueue((SessionEvent){ .type = EVENT_CHANGE_TIMED_PAUSE, .longer = longer });
-}
-
 bool session_coordinator_middle_control(void) {
   if (haptic_alert_dismiss()) {
     return true;
@@ -1080,7 +1073,9 @@ bool session_coordinator_top_control(void) {
     return false;
   }
   return prv_enqueue((SessionEvent){ .type = EVENT_TOP_CONTROL,
-      .extend_seconds = s_record.lifecycle == SESSION_RUNNING ? SESSION_EXTEND_TOP_SECONDS : 0 });
+      .extend_seconds = s_record.lifecycle == SESSION_RUNNING ||
+                        s_record.lifecycle == SESSION_TIMED_PAUSED ? SESSION_EXTEND_TOP_SECONDS : 0,
+      .timed_pause_control = s_record.lifecycle == SESSION_TIMED_PAUSED });
 }
 
 bool session_coordinator_bottom_control(void) {
@@ -1088,7 +1083,9 @@ bool session_coordinator_bottom_control(void) {
     return false;
   }
   return prv_enqueue((SessionEvent){ .type = EVENT_BOTTOM_CONTROL,
-      .extend_seconds = s_record.lifecycle == SESSION_RUNNING ? SESSION_EXTEND_BOTTOM_SECONDS : 0 });
+      .extend_seconds = s_record.lifecycle == SESSION_RUNNING ||
+                        s_record.lifecycle == SESSION_TIMED_PAUSED ? SESSION_EXTEND_BOTTOM_SECONDS : 0,
+      .timed_pause_control = s_record.lifecycle == SESSION_TIMED_PAUSED });
 }
 
 void session_coordinator_skip(void) {

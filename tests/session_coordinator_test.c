@@ -1905,7 +1905,7 @@ static void test_extend_is_not_available_outside_running(void) {
   fake_run_timers();
   view = prv_view();
   assert(view.record.lifecycle == SESSION_TIMED_PAUSED);
-  assert(view.record.pause_duration_seconds == 5 * 60);
+  assert(view.record.pause_duration_seconds == 35 * 60);
 }
 
 static void test_extend_press_during_timed_pause_does_not_extend_resumed_phase(void) {
@@ -2559,12 +2559,12 @@ static void test_timed_pause_entry_change_resume_and_stale_callback(void) {
 
   WakeupId old_pause_id = paused.record.wakeup_id;
   int32_t old_pause_cookie = (int32_t)paused.record.generation;
-  session_coordinator_change_timed_pause(true);
+  assert(session_coordinator_top_control());
   fake_run_timers();
   paused = prv_view();
   assert(paused.record.lifecycle == SESSION_TIMED_PAUSED);
-  assert(paused.record.pause_duration_seconds == 30 * 60);
-  assert(paused.record.pause_deadline_utc == fake_now + 30 * 60);
+  assert(paused.record.pause_duration_seconds == 10 * 60);
+  assert(paused.record.pause_deadline_utc == fake_now + 10 * 60);
   assert(paused.record.remaining_seconds == 45 * 60 - 137);
   assert(paused.record.wakeup_id != old_pause_id);
   fake_deliver_wakeup(old_pause_id, old_pause_cookie);
@@ -2598,14 +2598,14 @@ static void test_timed_pause_due_boundary_and_overdue_recovery(void) {
   WakeupId pause_id = paused.record.wakeup_id;
   int32_t pause_cookie = (int32_t)paused.record.generation;
   int32_t saved = paused.record.remaining_seconds;
-  session_coordinator_change_timed_pause(false);
+  assert(session_coordinator_bottom_control());
   fake_run_timers();
   paused = prv_view();
   assert(paused.record.pause_duration_seconds == 5 * 60);
-  session_coordinator_change_timed_pause(true);
+  assert(session_coordinator_top_control());
   fake_run_timers();
   paused = prv_view();
-  assert(paused.record.pause_duration_seconds == 30 * 60);
+  assert(paused.record.pause_duration_seconds == 10 * 60);
   saved = paused.record.remaining_seconds;
   fake_now = (time_t)paused.record.pause_deadline_utc;
   assert(session_coordinator_middle_control());
@@ -2625,23 +2625,47 @@ static void test_timed_pause_due_boundary_and_overdue_recovery(void) {
   paused = prv_view();
   assert(paused.record.lifecycle == SESSION_TIMED_PAUSED);
   assert(paused.record.pause_duration_seconds == 30 * 60);
-  session_coordinator_top_control();
+  int64_t original_deadline = paused.record.pause_deadline_utc;
+  assert(session_coordinator_top_control());
   fake_run_timers();
   paused = prv_view();
-  assert(paused.record.pause_duration_seconds == 5 * 60);
-  session_coordinator_bottom_control();
+  assert(paused.record.pause_deadline_utc == original_deadline + 5 * 60);
+  assert(paused.record.pause_duration_seconds == 35 * 60);
+  SessionRecord stored;
+  bool found;
+  assert(session_store_load(&stored, &found) && found);
+  assert(stored.pause_deadline_utc == original_deadline + 5 * 60);
+  assert(stored.pause_duration_seconds == 35 * 60);
+  assert(session_coordinator_bottom_control());
   fake_run_timers();
   paused = prv_view();
+  assert(paused.record.pause_deadline_utc == original_deadline);
   assert(paused.record.pause_duration_seconds == 30 * 60);
-  session_coordinator_top_control();
+  assert(session_coordinator_bottom_control());
   fake_run_timers();
   paused = prv_view();
-  assert(paused.record.pause_duration_seconds == 5 * 60);
-  session_coordinator_bottom_control();
+  assert(paused.record.pause_deadline_utc == original_deadline - 5 * 60);
+  assert(paused.record.pause_duration_seconds == 25 * 60);
+  assert(session_coordinator_top_control());
   fake_run_timers();
   paused = prv_view();
+  assert(paused.record.pause_deadline_utc == original_deadline);
   assert(paused.record.pause_duration_seconds == 30 * 60);
   assert(paused.record.remaining_seconds == 45 * 60);
+  assert(fake_haptic_count == 0);
+
+  /* Subtracting at 5 minutes or less clamps the break to one minute and cannot end it. */
+  fake_now = (time_t)paused.record.pause_deadline_utc - 4 * 60;
+  assert(session_coordinator_bottom_control());
+  fake_run_timers();
+  paused = prv_view();
+  assert(paused.record.pause_deadline_utc == fake_now + 60);
+  assert(paused.remaining_seconds == 60);
+  int schedules = fake_schedule_count;
+  assert(session_coordinator_bottom_control());
+  fake_run_timers();
+  assert(prv_view().record.pause_deadline_utc == fake_now + 60);
+  assert(fake_schedule_count == schedules);
   assert(fake_haptic_count == 0);
 
   fake_reset();
@@ -2767,7 +2791,7 @@ static void test_timed_pause_failure_retains_committed_state(void) {
   SessionView paused = prv_view();
   assert(paused.record.lifecycle == SESSION_TIMED_PAUSED);
   fake_fail_schedule = true;
-  session_coordinator_change_timed_pause(true);
+  assert(session_coordinator_top_control());
   fake_run_timers();
   view = prv_view();
   assert(view.record.lifecycle == SESSION_TIMED_PAUSED);
@@ -2777,18 +2801,19 @@ static void test_timed_pause_failure_retains_committed_state(void) {
 
   fake_fail_schedule = false;
   fake_fail_write = true;
-  session_coordinator_change_timed_pause(false);
+  assert(session_coordinator_bottom_control());
   fake_run_timers();
   view = prv_view();
   assert(view.record.lifecycle == SESSION_TIMED_PAUSED);
   assert(view.record.pause_duration_seconds == 5 * 60);
   assert(view.error == SESSION_ERROR_STORAGE);
   fake_fail_write = false;
-  session_coordinator_change_timed_pause(false);
+  assert(session_coordinator_bottom_control());
   fake_run_timers();
   paused = prv_view();
+  assert(paused.record.pause_duration_seconds == 60);
   fake_fail_schedule = true;
-  session_coordinator_middle_control();
+  assert(session_coordinator_top_control());
   fake_run_timers();
   view = prv_view();
   assert(view.record.lifecycle == SESSION_TIMED_PAUSED);
@@ -2906,7 +2931,7 @@ static void test_timed_pause_store_validation(void) {
   };
   assert(session_store_validate(&valid));
   SessionRecord invalid = valid;
-  invalid.pause_duration_seconds = 6 * 60;
+  invalid.pause_duration_seconds = -1;
   prv_expect_invalid(invalid);
   invalid = valid; invalid.pause_deadline_utc = 0; prv_expect_invalid(invalid);
   invalid = valid; invalid.pause_deadline_utc = (int64_t)INT32_MAX + 1; prv_expect_invalid(invalid);
@@ -2920,8 +2945,8 @@ static void test_timed_pause_store_validation(void) {
   memcpy(bytes, s_persisted, sizeof(bytes));
   uint8_t valid_bytes[45];
   memcpy(valid_bytes, bytes, sizeof(valid_bytes));
-  bytes[41] = 0x20;
-  bytes[42] = 0x03;
+  bytes[41] = 0;
+  bytes[42] = 0;
   bytes[43] = 0;
   bytes[44] = 0;
   prv_expect_load_rejected(bytes, sizeof(bytes));
@@ -2993,7 +3018,7 @@ static void test_store_round_trip(void) {
     .generation = 11,
     .remaining_seconds = 321,
     .pause_deadline_utc = 1800000300,
-    .pause_duration_seconds = 5 * 60,
+    .pause_duration_seconds = 35 * 60,
     .wakeup_id = 22,
   };
   prv_save(&timed);
@@ -3003,7 +3028,7 @@ static void test_store_round_trip(void) {
   assert(loaded.lifecycle == SESSION_TIMED_PAUSED);
   assert(loaded.phase == SESSION_PHASE_MOVE && loaded.remaining_seconds == 321);
   assert(loaded.pause_deadline_utc == timed.pause_deadline_utc);
-  assert(loaded.pause_duration_seconds == 5 * 60);
+  assert(loaded.pause_duration_seconds == 35 * 60);
   assert(loaded.wakeup_id == timed.wakeup_id);
 
   SessionRecord legacy = prv_full_record();

@@ -62,9 +62,7 @@ bool session_store_validate(const SessionRecord *record) {
   return record->lifecycle == SESSION_TIMED_PAUSED && record->deadline_utc == 0 &&
          record->remaining_seconds > 0 && record->pause_deadline_utc > 0 &&
          record->pause_deadline_utc <= INT32_MAX &&
-         (record->pause_duration_seconds == 5 * 60 ||
-          record->pause_duration_seconds == 10 * 60 ||
-          record->pause_duration_seconds == 30 * 60) &&
+         record->pause_duration_seconds > 0 &&
          record->wakeup_id >= 0 && record->wakeup_id != (WakeupId)-1;
 }
 
