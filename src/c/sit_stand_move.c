@@ -32,6 +32,7 @@ static char s_error_text[32];
 #define LABEL_HEIGHT 22
 #define TALLY_HEIGHT 28
 #define ERROR_HEIGHT 18
+#define MIN_TALLY_DISPLAY_SIZE 180
 
 static const char *prv_error_text(SessionError error) {
   switch (error) {
@@ -403,6 +404,9 @@ static void prv_window_load(Window *window) {
 
   int16_t tally_y = bounds.size.h - ERROR_HEIGHT - TALLY_HEIGHT;
   s_tally_layer = text_layer_create(GRect(0, tally_y, bounds.size.w, TALLY_HEIGHT));
+  layer_set_hidden(text_layer_get_layer(s_tally_layer),
+                   bounds.size.w < MIN_TALLY_DISPLAY_SIZE ||
+                   bounds.size.h < MIN_TALLY_DISPLAY_SIZE);
   text_layer_set_font(s_tally_layer, fonts_get_system_font(FONT_KEY_GOTHIC_24));
   text_layer_set_text_alignment(s_tally_layer, GTextAlignmentCenter);
   layer_add_child(root, text_layer_get_layer(s_tally_layer));
