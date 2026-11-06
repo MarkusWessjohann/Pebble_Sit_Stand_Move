@@ -98,3 +98,6 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-2-reset-the-phase-lengths-to-45-10-5.md`
   summary: On the emery emulator and Pebble Time 2, check the eight-row Settings window: `Reset` is the last row and fits, selecting it restores 45/10/5 in the three length rows, the window stays open, no preview plays, and the haptic pattern mark does not move.
   evidence: `sit_stand_move.c` is not compiled by the host harness and the sandbox has no Pebble SDK. Breaking `RESET_ROW`, the row count, the reload, or the stay-open behavior keeps every host test green. Same gap as Stories 1.6, 1.7, 2.1, 3.1, 3.2, and 4.1.
+- source_spec: `_bmad-output/implementation-artifacts/spec-add-phase-end-to-timeline.md`
+  summary: Add an informational Pebble Timeline pin for the current phase end if phone-side publishing is later allowed.
+  evidence: Owner chose to keep the app watch-only, but Pebble Timeline publishing requires a PebbleKit JS phone/network bridge; no such bridge exists in the repository.
