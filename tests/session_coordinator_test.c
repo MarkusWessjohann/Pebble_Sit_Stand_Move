@@ -164,6 +164,13 @@ void fake_app_log(const char *format, ...) {
 
 static bool s_vibe_is_preview;
 static bool s_vibe_is_repeat;
+static SessionRecord s_last_snapshot;
+static int s_snapshot_count;
+
+static void fake_snapshot_handler(const SessionRecord *record) {
+  s_last_snapshot = *record;
+  ++s_snapshot_count;
+}
 
 static void prv_fake_vibe(int pattern) {
   if (!s_vibe_is_preview && !s_vibe_is_repeat) {
@@ -348,6 +355,62 @@ static void test_start_and_stop(void) {
 
   fake_deliver_wakeup(old_id, old_generation);
   assert(prv_view().record.lifecycle == SESSION_INACTIVE);
+}
+
+static void test_phone_snapshot_handler_observes_committed_state(void) {
+  fake_reset();
+  s_snapshot_count = 0;
+  session_coordinator_set_snapshot_handler(fake_snapshot_handler);
+  session_coordinator_init();
+  fake_run_timers();
+  assert(s_snapshot_count == 1);
+  assert(s_last_snapshot.lifecycle == SESSION_INACTIVE);
+
+  session_coordinator_start();
+  fake_run_timers();
+  assert(s_snapshot_count == 2);
+  assert(s_last_snapshot.lifecycle == SESSION_RUNNING);
+  assert(s_last_snapshot.phase == SESSION_PHASE_SIT);
+  assert(s_last_snapshot.generation == prv_view().record.generation);
+  assert(s_last_snapshot.deadline_utc == prv_view().record.deadline_utc);
+
+  assert(session_coordinator_top_control());
+  fake_run_timers();
+  assert(s_snapshot_count == 3);
+  assert(s_last_snapshot.generation == prv_view().record.generation);
+  assert(s_last_snapshot.deadline_utc == prv_view().record.deadline_utc);
+
+  session_coordinator_skip();
+  fake_run_timers();
+  assert(s_snapshot_count == 4);
+  assert(s_last_snapshot.phase == SESSION_PHASE_STAND);
+  assert(s_last_snapshot.generation == prv_view().record.generation);
+
+  int32_t saved_remainder = (int32_t)(prv_view().record.deadline_utc - fake_now);
+  session_coordinator_timed_pause(5 * 60);
+  fake_run_timers();
+  assert(s_snapshot_count == 5);
+  assert(s_last_snapshot.lifecycle == SESSION_TIMED_PAUSED);
+  assert(s_last_snapshot.pause_deadline_utc == fake_now + 5 * 60);
+  assert(s_last_snapshot.remaining_seconds == saved_remainder);
+
+  session_coordinator_resume();
+  fake_run_timers();
+  assert(s_snapshot_count == 6);
+  assert(s_last_snapshot.lifecycle == SESSION_RUNNING);
+
+  session_coordinator_pause();
+  fake_run_timers();
+  assert(s_snapshot_count == 7);
+  assert(s_last_snapshot.lifecycle == SESSION_PAUSED);
+  assert(s_last_snapshot.deadline_utc == 0);
+  assert(s_last_snapshot.remaining_seconds > 0);
+
+  session_coordinator_stop();
+  fake_run_timers();
+  assert(s_snapshot_count == 8);
+  assert(s_last_snapshot.lifecycle == SESSION_INACTIVE);
+  session_coordinator_set_snapshot_handler(NULL);
 }
 
 static void test_stale_callback_is_ignored(void) {
@@ -4021,6 +4084,7 @@ static void test_phase_lengths_do_not_change_pause_choices_or_extend(void) {
 
 int main(void) {
   test_start_and_stop();
+  test_phone_snapshot_handler_observes_committed_state();
   test_phase_lengths_default_step_wrap_and_save_failure();
   test_phase_lengths_invalid_stored_falls_back_per_phase();
   test_phase_lengths_start_and_cycle_use_configured_values();

@@ -17,8 +17,11 @@ typedef struct {
   int32_t remaining_seconds;
 } SessionView;
 
+typedef void (*SessionSnapshotHandler)(const SessionRecord *record);
+
 void session_coordinator_init(void);
 void session_coordinator_deinit(void);
+void session_coordinator_set_snapshot_handler(SessionSnapshotHandler handler);
 void session_coordinator_start(void);
 void session_coordinator_pause(void);
 void session_coordinator_resume(void);

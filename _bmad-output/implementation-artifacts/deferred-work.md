@@ -100,4 +100,4 @@
   evidence: `sit_stand_move.c` is not compiled by the host harness and the sandbox has no Pebble SDK. Breaking `RESET_ROW`, the row count, the reload, or the stay-open behavior keeps every host test green. Same gap as Stories 1.6, 1.7, 2.1, 3.1, 3.2, and 4.1.
 - source_spec: `_bmad-output/implementation-artifacts/spec-add-phase-end-to-timeline.md`
   summary: Add an informational Pebble Timeline pin for the current phase end if phone-side publishing is later allowed.
-  evidence: Owner chose to keep the app watch-only, but Pebble Timeline publishing requires a PebbleKit JS phone/network bridge; no such bridge exists in the repository.
+  evidence: Superseded by owner-approved implementation in `spec-create-phone-timeline-bridge.md`; the phone-side bridge is now implemented and optional.

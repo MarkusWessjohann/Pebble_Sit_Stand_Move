@@ -26,6 +26,98 @@ static char s_phase_text[16];
 static char s_label_text[3][8];
 static char s_tally_text[48];
 static char s_error_text[32];
+static SessionRecord s_pending_snapshot;
+static bool s_snapshot_pending;
+static bool s_snapshot_sending;
+static bool s_snapshot_forced;
+static uint32_t s_snapshot_sending_generation;
+static bool s_app_message_open;
+
+enum {
+  MESSAGE_KEY_SNAPSHOT_VERSION = 0,
+  MESSAGE_KEY_REFRESH_SNAPSHOT = 1,
+  MESSAGE_KEY_LIFECYCLE = 2,
+  MESSAGE_KEY_PHASE = 3,
+  MESSAGE_KEY_GENERATION = 4,
+  MESSAGE_KEY_DEADLINE_UTC = 5,
+  MESSAGE_KEY_REMAINING_SECONDS = 6,
+  MESSAGE_KEY_PAUSE_DEADLINE_UTC = 7,
+};
+
+static void prv_send_snapshot(void);
+
+static void prv_snapshot_committed(const SessionRecord *record) {
+  s_pending_snapshot = *record;
+  s_snapshot_pending = true;
+  prv_send_snapshot();
+}
+
+static void prv_inbox_received(DictionaryIterator *iterator, void *context) {
+  (void)context;
+  Tuple *request = dict_find(iterator, MESSAGE_KEY_REFRESH_SNAPSHOT);
+  if (request && request->value->uint8 == 1) {
+    SessionView view;
+    s_snapshot_forced = true;
+    session_coordinator_get_view(&view);
+    prv_snapshot_committed(&view.record);
+  }
+}
+
+static void prv_send_snapshot(void) {
+  if (!s_snapshot_pending || s_snapshot_sending) {
+    return;
+  }
+  DictionaryIterator *iterator;
+  if (app_message_outbox_begin(&iterator) != APP_MSG_OK) {
+    s_snapshot_pending = true;
+    return;
+  }
+  SessionRecord record = s_pending_snapshot;
+  int64_t phase_end = record.lifecycle == SESSION_RUNNING ? record.deadline_utc : 0;
+  DictionaryResult result = dict_write_uint8(iterator, MESSAGE_KEY_SNAPSHOT_VERSION, 1);
+  if (result == DICT_OK) result = dict_write_uint8(iterator, MESSAGE_KEY_LIFECYCLE, record.lifecycle);
+  if (result == DICT_OK) result = dict_write_uint8(iterator, MESSAGE_KEY_PHASE, record.phase);
+  if (result == DICT_OK) result = dict_write_uint32(iterator, MESSAGE_KEY_GENERATION, record.generation);
+  if (result == DICT_OK) result = dict_write_uint32(iterator, MESSAGE_KEY_DEADLINE_UTC,
+                                                    (uint32_t)phase_end);
+  if (result == DICT_OK) result = dict_write_uint32(iterator, MESSAGE_KEY_REMAINING_SECONDS,
+                                                    (uint32_t)record.remaining_seconds);
+  if (result == DICT_OK) result = dict_write_uint32(iterator, MESSAGE_KEY_PAUSE_DEADLINE_UTC,
+                                                     (uint32_t)record.pause_deadline_utc);
+  if (result == DICT_OK && s_snapshot_forced) {
+    result = dict_write_uint8(iterator, MESSAGE_KEY_REFRESH_SNAPSHOT, 2);
+  }
+  if (result != DICT_OK || dict_write_end(iterator) != DICT_OK) {
+    s_snapshot_pending = true;
+    return;
+  }
+  s_snapshot_sending_generation = record.generation;
+  if (app_message_outbox_send() == APP_MSG_OK) {
+    s_snapshot_sending = true;
+    s_snapshot_pending = false;
+  }
+}
+
+static void prv_outbox_sent(DictionaryIterator *iterator, void *context) {
+  (void)iterator;
+  (void)context;
+  s_snapshot_sending = false;
+  s_snapshot_forced = false;
+  if (s_snapshot_pending && s_pending_snapshot.generation != s_snapshot_sending_generation) {
+    prv_send_snapshot();
+  } else {
+    s_snapshot_pending = false;
+  }
+}
+
+static void prv_outbox_failed(DictionaryIterator *iterator, AppMessageResult reason,
+                              void *context) {
+  (void)iterator;
+  (void)reason;
+  (void)context;
+  s_snapshot_sending = false;
+  s_snapshot_pending = true;
+}
 
 #define LABEL_COLUMN_WIDTH 78
 #define LABEL_RIGHT_MARGIN 5
@@ -155,6 +247,16 @@ static void prv_render(void) {
 
 static void prv_refresh(void *context) {
   s_refresh_timer = NULL;
+  if (!s_app_message_open) {
+    s_app_message_open = app_message_open(128, 0) == APP_MSG_OK;
+  }
+  if (!s_app_message_open) {
+    s_refresh_timer = app_timer_register(1000, prv_refresh, NULL);
+    return;
+  }
+  if (s_snapshot_pending && !s_snapshot_sending) {
+    prv_send_snapshot();
+  }
   prv_render();
   s_refresh_timer = app_timer_register(1000, prv_refresh, NULL);
 }
@@ -437,6 +539,11 @@ static void prv_window_unload(Window *window) {
 }
 
 static void prv_init(void) {
+  app_message_register_outbox_sent(prv_outbox_sent);
+  app_message_register_outbox_failed(prv_outbox_failed);
+  app_message_register_inbox_received(prv_inbox_received);
+  s_app_message_open = app_message_open(128, 0) == APP_MSG_OK;
+  session_coordinator_set_snapshot_handler(prv_snapshot_committed);
   session_coordinator_init();
   s_window = window_create();
   window_set_click_config_provider(s_window, prv_click_config_provider);
@@ -463,6 +570,7 @@ static void prv_deinit(void) {
     app_timer_cancel(s_refresh_timer);
   }
   session_coordinator_deinit();
+  session_coordinator_set_snapshot_handler(NULL);
   window_destroy(s_settings_window);
   window_destroy(s_menu_window);
   window_destroy(s_window);

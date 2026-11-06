@@ -21,6 +21,12 @@ sh scripts/test.sh    # host-side C coordinator tests (Pebble API stubs) and Pyt
 
 These do not exercise the Pebble SDK build, the menu UI, or watch firmware.
 
+## Phone Timeline bridge
+
+The optional PebbleKit JS bridge mirrors the watch coordinator's committed session snapshot to one informational Pebble Timeline pin. Phone pairing, phone connectivity, and the Timeline service are not required to start, time, or control a watch session. The watch retries its latest snapshot when the AppMessage outbox is available; the phone bridge retries failed Timeline requests using only its newest snapshot. No alerts or reminders are configured.
+
+To enable publishing, set `timelineApiToken` in `src/pkjs/config.json` to your own Pebble Timeline API user token before building. The checked-in value is blank; do not commit a real token. The pin is titled with the phase and its expected local end time (for example, `Sit ends at 10:45`). Its API time is the authoritative UTC phase deadline, including the predicted end after a timed break.
+
 ## Target platforms
 
 `targetPlatforms` in `package.json` controls which watches you build for. The
@@ -45,6 +51,15 @@ set `pebble.watchapp.watchface` to `true` in `package.json`.
 ## Documentation
 
 Full SDK docs, tutorials, and API reference: <https://developer.repebble.com>
+
+## Pebble Timeline phase-end pin
+
+The optional PebbleKit JS phone bridge mirrors committed watch session state to one
+informational Timeline pin. Watch timing and controls do not require the phone or
+network. To enable pin publishing, set `timelineApiToken` in
+`src/pkjs/config.json` to your private Timeline API token before building; do not
+commit a real token. Without a token, the bridge accepts snapshots but makes no
+Timeline requests. The pin is removed when the watch is inactive or manually paused.
 
 ## License
 

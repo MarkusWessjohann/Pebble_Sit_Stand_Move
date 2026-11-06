@@ -13,3 +13,4 @@ cc -std=c99 -Wall -Wextra -Werror -fshort-enums -I"$root/tests/pebble-stubs" -I"
 "$out/session_coordinator_test"
 
 python3 -m unittest discover -s "$root/tests"
+node --test "$root/tests/phone_timeline_test.js"

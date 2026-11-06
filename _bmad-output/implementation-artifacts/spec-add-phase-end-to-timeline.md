@@ -32,4 +32,4 @@ context: []
 
 ## Implementation Notes
 
-Investigation confirms this request adds a Pebble Timeline pin, not a watch-screen label. Pebble Timeline publishing requires phone-side PebbleKit JS and the Timeline service; the repository has no JS/AppMessage bridge and the selected watch-only constraint rules out the required mechanism. Owner chose to defer the pin rather than add phone/network dependence. No application code was changed.
+This earlier watch-only deferral was superseded by the owner-approved optional phone bridge. The active implementation is recorded in [spec-create-phone-timeline-bridge.md](spec-create-phone-timeline-bridge.md); phone/network availability does not control watch sessions.

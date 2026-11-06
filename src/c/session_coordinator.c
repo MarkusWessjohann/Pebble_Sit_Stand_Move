@@ -56,6 +56,15 @@ static AppTimer *s_drain_timer;
 static int32_t s_rollover_requested_day;
 static bool s_clock_check_queued;
 
+static bool prv_snapshot_record_changed(const SessionRecord *before, const SessionRecord *after) {
+  return before->lifecycle != after->lifecycle || before->phase != after->phase ||
+         before->generation != after->generation || before->deadline_utc != after->deadline_utc ||
+         before->remaining_seconds != after->remaining_seconds ||
+         before->pause_deadline_utc != after->pause_deadline_utc ||
+         before->pause_duration_seconds != after->pause_duration_seconds;
+}
+static SessionSnapshotHandler s_snapshot_handler;
+
 static SessionPhase prv_next_phase(SessionPhase phase);
 static int32_t prv_duration(SessionPhase phase);
 static int32_t prv_local_day(time_t now);
@@ -985,11 +994,19 @@ static void prv_process(const SessionEvent *event) {
 static void prv_drain(void *context) {
   (void)context;
   s_drain_timer = NULL;
+  bool snapshot_needed = false;
   while (s_queue_count) {
     SessionEvent event = s_queue[s_queue_read];
     s_queue_read = (s_queue_read + 1) % SESSION_QUEUE_SIZE;
     --s_queue_count;
+    SessionRecord before = s_record;
     prv_process(&event);
+    if (event.type == EVENT_RECOVER || prv_snapshot_record_changed(&before, &s_record)) {
+      snapshot_needed = true;
+    }
+  }
+  if (snapshot_needed && s_snapshot_handler) {
+    s_snapshot_handler(&s_record);
   }
 }
 
@@ -1038,6 +1055,10 @@ void session_coordinator_deinit(void) {
     app_timer_cancel(s_drain_timer);
     s_drain_timer = NULL;
   }
+}
+
+void session_coordinator_set_snapshot_handler(SessionSnapshotHandler handler) {
+  s_snapshot_handler = handler;
 }
 
 void session_coordinator_start(void) {

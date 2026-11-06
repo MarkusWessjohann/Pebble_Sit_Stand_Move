@@ -2,7 +2,9 @@
   "name": "sit_stand_move",
   "author": "MakeAwesomeHappen",
   "version": "1.0.0",
-  "keywords": ["pebble-app"],
+  "keywords": [
+    "pebble-app"
+  ],
   "license": "MIT",
   "private": false,
   "files": [
@@ -39,7 +41,14 @@
       "watchface": false
     },
     "messageKeys": [
-      "dummy"
+      "snapshot_version",
+      "refresh_snapshot",
+      "lifecycle",
+      "phase",
+      "generation",
+      "deadline_utc",
+      "remaining_seconds",
+      "pause_deadline_utc"
     ],
     "resources": {
       "media": [
